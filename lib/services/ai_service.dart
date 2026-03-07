@@ -9,7 +9,7 @@ class AIService {
   static const bool _useExternalAPI = false;
   
   // HuggingFace API token - replace with your own
-  static const String _hfToken = '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';
+  static const String _hfToken = '';
   
   // Local knowledge base for Instagram-related questions
   static final Map<String, String> _instagramKnowledgeBase = {
