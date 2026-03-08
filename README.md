@@ -1,6 +1,6 @@
-# EmmStagram
+# RebelGram
 
-Instagram‑style social media app built with Flutter and Firebase.
+RebelGram‑style social media app built with Flutter and Firebase.
 
 ## Features
 
@@ -8,7 +8,7 @@ Instagram‑style social media app built with Flutter and Firebase.
 2. **Search**: Look for users by username or posts by caption keywords.
 3. **Add Post**: Upload an image from device or provide an image URL, add a caption, and publish.
 4. **Profile**: View your account details and log out.
-5. **AI Chatbot**: Ask any question about Instagram and receive helpful answers powered by OpenAI.
+5. **AI Chatbot**: Ask any question about RebelGram and receive helpful answers powered by OpenAI.
 6. **Authentication**: Firebase email/password sign up and login.
 
 ## Setup
@@ -24,9 +24,6 @@ Instagram‑style social media app built with Flutter and Firebase.
 
 ## Notes
 
-- This application uses Provider for state management.
-- All code is written in Dart/Flutter; no platform-specific code is required.
-- Error handling and loading states have been added to provide a production‑ready
   experience.
 
-Enjoy experimenting with EmmStagram!
+Enjoy experimenting with RebelGram!

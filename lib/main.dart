@@ -13,10 +13,10 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   ); // use generated Firebase options
-  runApp(EmmStagramApp());
+  runApp(RebelGramApp());
 }
 
-class EmmStagramApp extends StatelessWidget {
+class RebelGramApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
@@ -27,7 +27,7 @@ class EmmStagramApp extends StatelessWidget {
       ],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
-        title: 'EmmStagram',
+        title: 'RebelGram',
         theme: ThemeData.dark().copyWith(
           // dark social media style
           scaffoldBackgroundColor: Color(0xFF121212),

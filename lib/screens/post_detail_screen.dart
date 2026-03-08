@@ -9,7 +9,9 @@ import '../providers/user_provider.dart';
 
 class PostDetailScreen extends StatefulWidget {
   final PostModel post;
-  PostDetailScreen({required this.post});
+  final VoidCallback? onCommentAdded;
+  
+  PostDetailScreen({required this.post, this.onCommentAdded});
 
   @override
   _PostDetailScreenState createState() => _PostDetailScreenState();
@@ -32,6 +34,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     );
     await FirebaseFirestore.instance.collection('comments').doc(comment.id).set(comment.toMap());
     commentController.clear();
+    
+    // Call the callback if provided
+    widget.onCommentAdded?.call();
   }
 
   @override
@@ -52,27 +57,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       ),
       body: Column(
         children: [
-          // Post image
-          CachedNetworkImage(
-            imageUrl: widget.post.imageUrl,
-            placeholder: (context, url) => Container(
-              height: 250,
-              color: Colors.grey[900],
-              child: Center(
-                child: CircularProgressIndicator(
-                  color: Color(0xFF0095F6),
-                ),
-              ),
-            ),
-            errorWidget: (context, url, error) => Container(
-              height: 250,
-              color: Colors.grey[900],
-              child: Center(child: Icon(Icons.broken_image, size: 50, color: Colors.grey[600])),
-            ),
-            width: double.infinity,
-            fit: BoxFit.cover,
-          ),
-          
           // Caption
           Padding(
             padding: EdgeInsets.all(12),
@@ -88,9 +72,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               ],
             ),
           ),
-          
+
           Divider(height: 1, color: Colors.grey[800]),
-          
+
           // Comments section header
           Padding(
             padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -107,10 +91,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               ],
             ),
           ),
-          
+
           Divider(height: 1, color: Colors.grey[800]),
-          
-          // Comments list
+
+          // Comments list (above the post image)
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
@@ -212,7 +196,28 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               },
             ),
           ),
-          
+
+          // Post image shown below the comments
+          CachedNetworkImage(
+            imageUrl: widget.post.imageUrl,
+            placeholder: (context, url) => Container(
+              height: 250,
+              color: Colors.grey[900],
+              child: Center(
+                child: CircularProgressIndicator(
+                  color: Color(0xFF0095F6),
+                ),
+              ),
+            ),
+            errorWidget: (context, url, error) => Container(
+              height: 250,
+              color: Colors.grey[900],
+              child: Center(child: Icon(Icons.broken_image, size: 50, color: Colors.grey[600])),
+            ),
+            width: double.infinity,
+            fit: BoxFit.cover,
+          ),
+
           // Comment input
           Container(
             decoration: BoxDecoration(

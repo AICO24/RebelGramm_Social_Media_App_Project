@@ -20,26 +20,101 @@ class _PostCardState extends State<PostCard> {
   final PostService _postService = PostService();
   bool _isSaved = false;
   bool _loadingSave = false;
+  bool _isFollowing = false;
+  bool _loadingFollow = false;
   String? _displayName;
+  int _commentCount = 0;
 
   @override
   void initState() {
     super.initState();
     _displayName = widget.post.username;
     if ((_displayName ?? '').isEmpty) {
-      // fetch username from user record and patch post
-      FirebaseFirestore.instance.collection('users').doc(widget.post.userId).get().then((doc) {
-        final name = (doc.data()?['username'] ?? '').toString();
-        if (name.isNotEmpty) {
+      // fetch username from user record
+      _fetchUsername();
+    }
+    _checkSaved();
+    _checkFollowing();
+    _loadCommentCount();
+  }
+
+  Future<void> _loadCommentCount() async {
+    final count = await _postService.getCommentCount(widget.post.id);
+    if (mounted) {
+      setState(() {
+        _commentCount = count;
+      });
+    }
+  }
+
+  Future<void> _fetchUsername() async {
+    try {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(widget.post.userId).get();
+      final name = (doc.data()?['username'] ?? '').toString();
+      if (name.isNotEmpty) {
+        if (mounted) {
           setState(() {
             _displayName = name;
           });
-          // optionally update the post document so future loads don't need fetch
-          FirebaseFirestore.instance.collection('posts').doc(widget.post.id).update({'username': name});
         }
-      });
+        // Update the post document so future loads don't need fetch
+        await FirebaseFirestore.instance.collection('posts').doc(widget.post.id).update({'username': name});
+      }
+    } catch (e) {
+      // Silently fail - will show userId as fallback
     }
-    _checkSaved();
+  }
+
+  Future<void> _checkFollowing() async {
+    if (widget.currentUser == null) return;
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(widget.currentUser.id)
+        .collection('following')
+        .doc(widget.post.userId)
+        .get();
+    if (!mounted) return;
+    setState(() {
+      _isFollowing = doc.exists;
+    });
+  }
+
+  Future<void> _toggleFollow() async {
+    final user = widget.currentUser;
+    if (user == null) return;
+    if (_loadingFollow) return;
+    setState(() => _loadingFollow = true);
+    try {
+      final followingRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.id)
+          .collection('following')
+          .doc(widget.post.userId);
+      final followersRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.post.userId)
+          .collection('followers')
+          .doc(user.id);
+
+      if (_isFollowing) {
+        await followingRef.delete();
+        await followersRef.delete();
+        if (!mounted) return;
+        setState(() => _isFollowing = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Unfollowed')));
+      } else {
+        await followingRef.set({'timestamp': DateTime.now()});
+        await followersRef.set({'timestamp': DateTime.now()});
+        if (!mounted) return;
+        setState(() => _isFollowing = true);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Following')));
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Follow action failed: $e')));
+    } finally {
+      if (!mounted) return;
+      setState(() => _loadingFollow = false);
+    }
   }
 
   Future<void> _checkSaved() async {
@@ -84,6 +159,14 @@ class _PostCardState extends State<PostCard> {
         .doc(user.id)
         .collection('following')
         .get();
+    
+    if (follows.docs.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('You need to follow someone to share posts')),
+      );
+      return;
+    }
+    
     showModalBottomSheet(
       context: context,
       backgroundColor: Color(0xFF1E1E1E),
@@ -93,8 +176,10 @@ class _PostCardState extends State<PostCard> {
           children: follows.docs.map((doc) {
             final data = doc.data() as Map<String, dynamic>;
             final fid = doc.id;
-            final fname = data['username'] ?? 'User';
+            // Try to get username from stored data, fallback to fetching from users collection
+            String fname = data['username'] ?? 'User';
             final fpic = data['profilePic'] ?? '';
+            
             return ListTile(
               leading: CircleAvatar(
                 backgroundImage: fpic.isNotEmpty ? NetworkImage(fpic) : null,
@@ -176,9 +261,28 @@ class _PostCardState extends State<PostCard> {
                     ),
                   ),
                 ),
+                // Follow button visible on every post
+                Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: TextButton(
+                    onPressed: widget.currentUser == null ? null : _toggleFollow,
+                    child: Text(
+                      _isFollowing ? 'Following' : 'Follow',
+                      style: TextStyle(
+                        color: _isFollowing ? Colors.grey[400] : Color(0xFF0095F6),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      minimumSize: Size(0, 0),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                ),
                 IconButton(
                   icon: Icon(Icons.more_horiz, color: Colors.grey[600]),
-                  onPressed: () {},
+                  onPressed: () => _showPostOptions(context),
                 ),
               ],
             ),
@@ -269,10 +373,15 @@ class _PostCardState extends State<PostCard> {
           
           // View comments
           GestureDetector(
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PostDetailScreen(post: widget.post))),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PostDetailScreen(post: widget.post, onCommentAdded: _loadCommentCount))),
             child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: Text('View all comments', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+              child: Text(
+                _commentCount > 0 
+                    ? 'View all $_commentCount comments' 
+                    : 'Add a comment...',
+                style: TextStyle(color: Colors.grey[400], fontSize: 14),
+              ),
             ),
           ),
           
@@ -281,7 +390,7 @@ class _PostCardState extends State<PostCard> {
             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Text(
               _formatTimestamp(widget.post.timestamp),
-              style: TextStyle(color: Colors.grey[400], fontSize: 12),
+              style: TextStyle(color: Colors.grey[500], fontSize: 12),
             ),
           ),
           
@@ -303,6 +412,66 @@ class _PostCardState extends State<PostCard> {
       return '${difference.inMinutes}m ago';
     } else {
       return 'Just now';
+    }
+  }
+
+  void _showPostOptions(BuildContext context) {
+    final isOwner = widget.currentUser != null && widget.currentUser.id == widget.post.userId;
+    
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Color(0xFF1E1E1E),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(height: 8),
+              Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
+              SizedBox(height: 16),
+              if (isOwner)
+                ListTile(
+                  leading: Icon(Icons.delete_outline, color: Colors.red),
+                  title: Text('Delete Post', style: TextStyle(color: Colors.red)),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await _deletePost();
+                  },
+                ),
+              if (isOwner) Divider(),
+              ListTile(
+                leading: Icon(Icons.share_outlined, color: Colors.white),
+                title: Text('Share to', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showShareSheet();
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.link, color: Colors.white),
+                title: Text('Copy Link', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Link copied!')));
+                },
+              ),
+              SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _deletePost() async {
+    try {
+      await _postService.deletePost(widget.post.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Post deleted')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to delete post: $e')));
     }
   }
 }

@@ -94,6 +94,9 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Now following ${user.username}!')),
       );
+      
+      // Refresh the list to update button state
+      _doSearch(_searchController.text);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to follow: $e')),

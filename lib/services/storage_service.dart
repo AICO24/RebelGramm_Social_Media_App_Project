@@ -14,7 +14,22 @@ class StorageService {
       if (task.state == TaskState.success) {
         return await ref.getDownloadURL();
       } else {
-        throw Exception('Upload failed (state: \\${task.state})');
+        throw Exception('Upload failed (state: ${task.state})');
+      }
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<String> uploadReelVideo(File file) async {
+    String id = Uuid().v4();
+    final ref = _storage.ref().child('reels/$id.mp4');
+    try {
+      final task = await ref.putFile(file);
+      if (task.state == TaskState.success) {
+        return await ref.getDownloadURL();
+      } else {
+        throw Exception('Upload failed (state: ${task.state})');
       }
     } catch (e) {
       rethrow;

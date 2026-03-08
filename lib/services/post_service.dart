@@ -163,4 +163,18 @@ class PostService {
         .where((p) => p.caption.toLowerCase().contains(lower))
         .toList();
   }
+
+  /// Delete a post by [postId]. This also removes it from the feed.
+  Future<void> deletePost(String postId) async {
+    await _db.collection('posts').doc(postId).delete();
+  }
+
+  /// Get comment count for a post
+  Future<int> getCommentCount(String postId) async {
+    final snapshot = await _db
+        .collection('comments')
+        .where('postId', isEqualTo: postId)
+        .get();
+    return snapshot.docs.length;
+  }
 }

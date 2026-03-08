@@ -11,6 +11,9 @@ import '../models/story_model.dart';
 import '../services/story_service.dart';
 import '../widgets/post_card.dart';
 import 'add_post_screen.dart';
+import 'add_reel_screen.dart';
+import '../services/reel_service.dart';
+import '../models/reel_model.dart';
 import 'profile_screen.dart';
 import 'chatbot_screen.dart';
 import 'search_screen.dart';
@@ -258,6 +261,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   return _buildStoryItem(
                     profilePic,
                     username,
+                    uid,
                     isCurrentUser: isCurrentUser,
                     hasStory: hasStory,
                   );
@@ -270,11 +274,15 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildStoryItem(String profilePic, String username, {required bool isCurrentUser, required bool hasStory}) {
+  Widget _buildStoryItem(String profilePic, String username, String userId, {required bool isCurrentUser, required bool hasStory}) {
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 8),
       child: GestureDetector(
-        onTap: isCurrentUser ? _addStory : null,
+        onTap: isCurrentUser 
+            ? _addStory 
+            : hasStory 
+                ? () => _viewStory(userId, username, profilePic)
+                : null,
         child: Column(
           children: [
             Stack(
@@ -347,6 +355,94 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  void _viewStory(String userId, String username, String profilePic) {
+    // Show story in a full screen dialog
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: EdgeInsets.all(0),
+        child: Stack(
+          children: [
+            // Story image (using cached network image placeholder for now)
+            Center(
+              child: profilePic.isNotEmpty
+                  ? Image.network(
+                      profilePic,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      height: double.infinity,
+                      errorBuilder: (_, __, ___) => _buildStoryPlaceholder(username),
+                    )
+                  : _buildStoryPlaceholder(username),
+            ),
+            // Header
+            Positioned(
+              top: 40,
+              left: 16,
+              right: 16,
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor: Colors.grey[800],
+                    backgroundImage: profilePic.isNotEmpty ? NetworkImage(profilePic) : null,
+                    child: profilePic.isEmpty
+                        ? Text(username.isNotEmpty ? username[0].toUpperCase() : '?', style: TextStyle(color: Colors.white))
+                        : null,
+                  ),
+                  SizedBox(width: 12),
+                  Text(
+                    username,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Close button
+            Positioned(
+              top: 40,
+              right: 16,
+              child: IconButton(
+                icon: Icon(Icons.close, color: Colors.white, size: 28),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStoryPlaceholder(String username) {
+    return Container(
+      width: 200,
+      height: 200,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF833AB4), Color(0xFFE1306C), Color(0xFFF56040)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        shape: BoxShape.circle,
+      ),
+      child: Center(
+        child: Text(
+          username.isNotEmpty ? username[0].toUpperCase() : '?',
+          style: TextStyle(
+            fontSize: 60,
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ),
     );
@@ -450,8 +546,49 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           );
       case 1:
-        // placeholder reels page
-        return Center(child: Text('Reels', style: TextStyle(color: Colors.white, fontSize: 24)));
+        // Reels feed
+        return StreamBuilder<List<ReelModel>>(
+          stream: ReelService().fetchReels(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return Center(child: CircularProgressIndicator(color: Color(0xFF0095F6)));
+            }
+            final reels = snapshot.data!;
+            if (reels.isEmpty) {
+              return Center(child: Text('No reels yet', style: TextStyle(color: Colors.grey[500])));
+            }
+            return ListView.builder(
+              itemCount: reels.length,
+              itemBuilder: (context, index) {
+                final r = reels[index];
+                return ListTile(
+                  tileColor: Color(0xFF1E1E1E),
+                  leading: Container(
+                    width: 64,
+                    height: 64,
+                    color: Colors.grey[800],
+                    child: Center(child: Icon(Icons.play_arrow, color: Colors.white)),
+                  ),
+                  title: Text(r.username, style: TextStyle(color: Colors.white)),
+                  subtitle: Text(r.caption, style: TextStyle(color: Colors.grey[400])),
+                  onTap: () {
+                    showDialog(
+                      context: context,
+                      builder: (_) => AlertDialog(
+                        backgroundColor: Color(0xFF121212),
+                        title: Text('Reel', style: TextStyle(color: Colors.white)),
+                        content: Text('Video URL:\n${r.videoUrl}', style: TextStyle(color: Colors.white70)),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(context), child: Text('Close')),
+                        ],
+                      ),
+                    );
+                  },
+                );
+              },
+            );
+          },
+        );
       case 2:
         return Container();
       case 3:
@@ -518,6 +655,13 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
+      floatingActionButton: _currentIndex == 1
+          ? FloatingActionButton(
+              backgroundColor: Color(0xFF0095F6),
+              child: Icon(Icons.add),
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AddReelScreen())),
+            )
+          : null,
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Color(0xFF121212),

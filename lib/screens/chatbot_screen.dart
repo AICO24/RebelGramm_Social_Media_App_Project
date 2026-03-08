@@ -211,7 +211,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
             ),
             SizedBox(width: 10),
             Text(
-              'Instagram Assistant',
+              'RebelGram Assistant',
               style: TextStyle(
                 color: Colors.black,
                 fontSize: 17,
@@ -268,7 +268,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
                     ),
                     SizedBox(height: 24),
                     Text(
-                      'Welcome to Instagram Assistant!',
+                      'Welcome to RebelGram Assistant!',
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w600,
@@ -279,7 +279,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
                     Padding(
                       padding: EdgeInsets.symmetric(horizontal: 40),
                       child: Text(
-                        'Your chat history is saved. Ask me anything about Instagram - tips, features, how-tos, and more!',
+                        'Your chat history is saved. Ask me anything about RebelGram - tips, features, how-tos, and more!',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 14,
@@ -338,7 +338,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
               ),
             ),
           
-          // Input area - Instagram style
+          // Input area - RebelGram style
           Container(
             decoration: BoxDecoration(
               color: Colors.white,
