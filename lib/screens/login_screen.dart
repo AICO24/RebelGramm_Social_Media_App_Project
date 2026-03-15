@@ -9,6 +9,8 @@ import '../screens/home_screen.dart';
 import '../providers/user_provider.dart';
 
 class LoginScreen extends StatefulWidget {
+  const LoginScreen({Key? key}) : super(key: key);
+
   @override
   _LoginScreenState createState() => _LoginScreenState();
 }
@@ -60,8 +62,11 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final user = await auth.signIn(emailController.text, passwordController.text);
       if (user != null) {
-        Provider.of<UserProvider>(context, listen: false).setUser(user);
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomeScreen()));
+        if (!mounted) return;
+        final provider = Provider.of<UserProvider>(context, listen: false);
+        provider.setUser(user);
+        provider.startListening(user.id);
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomeScreen()));
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -186,7 +191,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     children: [
                       Text("Don't have an account? ", style: TextStyle(color: Colors.white70)),
                       GestureDetector(
-                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => RegisterScreen())),
+                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RegisterScreen())),
                         child: Text('Sign up', style: TextStyle(color: Color(0xFF0095F6), fontWeight: FontWeight.w600)),
                       ),
                     ],

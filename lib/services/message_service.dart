@@ -19,7 +19,7 @@ class MessageService {
       'senderId': senderId,
       'receiverId': receiverId,
       'message': trimmedMessage,
-      'timestamp': DateTime.now(),
+      'timestamp': FieldValue.serverTimestamp(),
       'isRead': false,
     });
   }

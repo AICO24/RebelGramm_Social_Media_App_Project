@@ -11,6 +11,8 @@ import '../services/post_service.dart';
 import '../widgets/post_card.dart';
 
 class SearchScreen extends StatefulWidget {
+  const SearchScreen({Key? key}) : super(key: key);
+
   @override
   _SearchScreenState createState() => _SearchScreenState();
 }
@@ -53,6 +55,7 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
     });
     final users = await _userService.searchUsers(query.trim());
     final posts = await _postService.searchPosts(query.trim());
+    if (!mounted) return;
     setState(() {
       _users = users;
       _posts = posts;
@@ -72,11 +75,11 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
           .collection('following')
           .doc(user.id)
           .set({
-        'userId': user.id,
-        'username': user.username,
-        'profilePic': user.profilePic,
-        'timestamp': DateTime.now(),
-      });
+            'userId': user.id,
+            'username': user.username,
+            'profilePic': user.profilePic,
+            'timestamp': FieldValue.serverTimestamp(),
+          });
 
       // Add to follower's followers
       await FirebaseFirestore.instance
@@ -85,19 +88,20 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
           .collection('followers')
           .doc(currentUser.id)
           .set({
-        'userId': currentUser.id,
-        'username': currentUser.username,
-        'profilePic': currentUser.profilePic,
-        'timestamp': DateTime.now(),
-      });
+            'userId': currentUser.id,
+            'username': currentUser.username,
+            'profilePic': currentUser.profilePic,
+            'timestamp': FieldValue.serverTimestamp(),
+          });
 
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Now following ${user.username}!')),
       );
-      
       // Refresh the list to update button state
       _doSearch(_searchController.text);
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to follow: $e')),
       );
@@ -421,13 +425,14 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
           .doc(currentUser.id)
           .delete();
 
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Unfollowed ${user.username}')),
       );
-      
       // Refresh the list
       _doSearch(_searchController.text);
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to unfollow: $e')),
       );

@@ -6,6 +6,8 @@ import '../services/message_service.dart';
 import '../models/message_model.dart';
 
 class InboxScreen extends StatefulWidget {
+  const InboxScreen({Key? key}) : super(key: key);
+
   @override
   _InboxScreenState createState() => _InboxScreenState();
 }
@@ -218,7 +220,7 @@ class _ConversationTile extends StatelessWidget {
 class _NewMessageSheet extends StatefulWidget {
   final String currentUserId;
 
-  _NewMessageSheet({required this.currentUserId});
+  const _NewMessageSheet({Key? key, required this.currentUserId}) : super(key: key);
 
   @override
   _NewMessageSheetState createState() => _NewMessageSheetState();
@@ -241,7 +243,8 @@ class _NewMessageSheetState extends State<_NewMessageSheet> {
         .doc(widget.currentUserId)
         .collection('following')
         .get();
-    
+
+    if (!mounted) return;
     setState(() {
       _followers = snapshot.docs;
       _loading = false;
@@ -360,7 +363,7 @@ class ChatScreen extends StatefulWidget {
   final String currentUserId;
   final String otherUserId;
 
-  ChatScreen({required this.currentUserId, required this.otherUserId});
+  const ChatScreen({Key? key, required this.currentUserId, required this.otherUserId}) : super(key: key);
 
   @override
   _ChatScreenState createState() => _ChatScreenState();

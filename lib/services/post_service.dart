@@ -9,7 +9,10 @@ class PostService {
     final id = Uuid().v4();
     // ensure timestamp is stored as Firestore Timestamp
     final data = post.toMap();
-    data['timestamp'] = Timestamp.fromDate(post.timestamp);
+    // Use server timestamp to avoid client clock / web watch issues
+    data['timestamp'] = FieldValue.serverTimestamp();
+    // ensure likeCount exists
+    data['likeCount'] = post.likeCount;
     await _db.collection('posts').doc(id).set(data);
   }
 
@@ -17,9 +20,45 @@ class PostService {
     return _db.collection('posts')
       .orderBy('timestamp', descending: true)
       .snapshots()
-      .map((snapshot) => snapshot.docs
-          .map((doc) => PostModel.fromMap(doc.data(), doc.id))
+        .map((snapshot) => snapshot.docs
+          .map((doc) => PostModel.fromMap(doc.data() as Map<String, dynamic>, doc.id))
           .toList());
+  }
+
+  /// Fetch a single page of posts for pagination. Use [startAfter] to load the next page.
+  Future<List<PostModel>> fetchPostsPage({DocumentSnapshot? startAfter, int pageSize = 10}) async {
+    Query q = _db.collection('posts').orderBy('timestamp', descending: true).limit(pageSize);
+    if (startAfter != null) q = q.startAfterDocument(startAfter);
+    final snap = await q.get();
+    return snap.docs.map((d) => PostModel.fromMap(d.data() as Map<String, dynamic>, d.id)).toList();
+  }
+
+  /// Return the raw query snapshot for a posts page (useful to obtain DocumentSnapshots for pagination).
+  Future<QuerySnapshot> fetchPostsPageSnapshot({DocumentSnapshot? startAfter, int pageSize = 10}) async {
+    Query q = _db.collection('posts').orderBy('timestamp', descending: true).limit(pageSize);
+    if (startAfter != null) q = q.startAfterDocument(startAfter);
+    return await q.get();
+  }
+
+  /// Fetch a page of posts from followed users. Returns a QuerySnapshot so callers can page.
+  Future<QuerySnapshot> fetchFollowingPostsPageSnapshot(String currentUserId, {DocumentSnapshot? startAfter, int pageSize = 10}) async {
+    // If no user, return normal posts page
+    if (currentUserId.isEmpty) return fetchPostsPageSnapshot(startAfter: startAfter, pageSize: pageSize);
+
+    final followingSnapshot = await _db
+        .collection('users')
+        .doc(currentUserId)
+        .collection('following')
+        .get();
+    final followingIds = followingSnapshot.docs.map((doc) => doc.id).toList();
+    if (!followingIds.contains(currentUserId)) followingIds.add(currentUserId);
+
+    // Firestore whereIn supports up to 10 values
+    if (followingIds.length > 10) return fetchPostsPageSnapshot(startAfter: startAfter, pageSize: pageSize);
+
+    Query q = _db.collection('posts').where('userId', whereIn: followingIds).orderBy('timestamp', descending: true).limit(pageSize);
+    if (startAfter != null) q = q.startAfterDocument(startAfter);
+    return await q.get();
   }
 
   /// Fetch posts from followed users only
@@ -57,8 +96,8 @@ class PostService {
           .where('userId', whereIn: followingIds)
           .orderBy('timestamp', descending: true)
           .snapshots()
-          .map((snapshot) => snapshot.docs
-              .map((doc) => PostModel.fromMap(doc.data(), doc.id))
+            .map((snapshot) => snapshot.docs
+              .map((doc) => PostModel.fromMap(doc.data() as Map<String, dynamic>, doc.id))
               .toList());
     } catch (e) {
       // if query fails for any reason (type mismatch, etc.) fall back
@@ -67,28 +106,43 @@ class PostService {
   }
 
   Future<void> likePost(String postId, String userId) async {
-    final doc = _db.collection('posts').doc(postId);
-    final snapshot = await doc.get();
-    List likes = snapshot['likes'] ?? [];
-    if (likes.contains(userId)) {
-      likes.remove(userId);
-    } else {
-      likes.add(userId);
-      // Add notification
-      final postDoc = await doc.get();
-      final postUserId = postDoc['userId'];
-      if (postUserId != userId) {
-        await _db.collection('notifications').add({
-          'userId': postUserId,
-          'type': 'like',
-          'message': 'liked your post',
-          'fromUserId': userId,
-          'postId': postId,
-          'timestamp': DateTime.now(),
-        });
+    final postRef = _db.collection('posts').doc(postId);
+    final likeRef = postRef.collection('likes').doc(userId);
+
+    await _db.runTransaction((tx) async {
+      final postSnap = await tx.get(postRef);
+      if (!postSnap.exists) return;
+      final likeSnap = await tx.get(likeRef);
+      final postUserId = (postSnap.data() as Map<String, dynamic>)['userId'] as String?;
+
+      if (likeSnap.exists) {
+        // Unlike: remove the like doc and decrement a likeCount field
+        tx.delete(likeRef);
+        tx.update(postRef, {'likeCount': FieldValue.increment(-1)});
+      } else {
+        // Like: create like doc and increment likeCount
+        tx.set(likeRef, {'createdAt': FieldValue.serverTimestamp()});
+        tx.update(postRef, {'likeCount': FieldValue.increment(1)});
+        // Add notification for the post owner (only if different)
+        if (postUserId != null && postUserId != userId) {
+          final notifRef = _db.collection('notifications').doc();
+          tx.set(notifRef, {
+            'userId': postUserId,
+            'type': 'like',
+            'message': 'liked your post',
+            'fromUserId': userId,
+            'postId': postId,
+            'timestamp': FieldValue.serverTimestamp(),
+          });
+        }
       }
-    }
-    await doc.update({'likes': likes});
+    });
+  }
+
+  /// Check whether a user has liked a given post (reads the likes subcollection).
+  Future<bool> isPostLiked(String postId, String userId) async {
+    final doc = await _db.collection('posts').doc(postId).collection('likes').doc(userId).get();
+    return doc.exists;
   }
 
   Future<void> savePost(String postId, String userId) async {
@@ -97,7 +151,7 @@ class PostService {
         .doc(userId)
         .collection('saved')
         .doc(postId)
-        .set({'savedAt': DateTime.now()});
+      .set({'savedAt': FieldValue.serverTimestamp()});
   }
 
   Future<void> unsavePost(String postId, String userId) async {
@@ -128,7 +182,7 @@ class PostService {
       'message': 'sent you a post',
       'fromUserId': fromUserId,
       'postId': postId,
-      'timestamp': DateTime.now(),
+      'timestamp': FieldValue.serverTimestamp(),
     });
   }
 
@@ -141,7 +195,7 @@ class PostService {
       'username': newUsername,
       'caption': original.caption,
       'imageUrl': original.imageUrl,
-      'timestamp': Timestamp.fromDate(DateTime.now()),
+      'timestamp': FieldValue.serverTimestamp(),
       'likes': <String>[],
       'repostOf': original.id,
     };

@@ -4,7 +4,7 @@ import '../models/comment_model.dart';
 
 class CommentTile extends StatefulWidget {
   final CommentModel comment;
-  CommentTile({required this.comment});
+  const CommentTile({Key? key, required this.comment}) : super(key: key);
 
   @override
   _CommentTileState createState() => _CommentTileState();

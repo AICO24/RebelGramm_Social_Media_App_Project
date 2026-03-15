@@ -8,7 +8,7 @@ class ReelService {
   Future<void> createReel(ReelModel reel) async {
     final id = Uuid().v4();
     final data = reel.toMap();
-    data['timestamp'] = Timestamp.fromDate(reel.timestamp);
+    data['timestamp'] = FieldValue.serverTimestamp();
     await _db.collection('reels').doc(id).set(data);
   }
 

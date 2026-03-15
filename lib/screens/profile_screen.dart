@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -15,6 +16,8 @@ import '../models/post_model.dart';
 import '../models/user_model.dart';
 
 class ProfileScreen extends StatefulWidget {
+  const ProfileScreen({Key? key}) : super(key: key);
+
   @override
   _ProfileScreenState createState() => _ProfileScreenState();
 }
@@ -36,33 +39,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _loadStats() async {
     final user = Provider.of<UserProvider>(context, listen: false).user;
     if (user == null) return;
-    
-    // Load followers count
-    final followersSnap = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.id)
-        .collection('followers')
-        .get();
-    
-    // Load following count
-    final followingSnap = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.id)
-        .collection('following')
-        .get();
-    
-    // Load posts count
-    final postsSnap = await FirebaseFirestore.instance
-        .collection('posts')
-        .where('userId', isEqualTo: user.id)
-        .get();
-    
-    if (mounted) {
-      setState(() {
-        _followersCount = followersSnap.docs.length;
-        _followingCount = followingSnap.docs.length;
-        _postsCount = postsSnap.docs.length;
-      });
+    try {
+      // Load followers count
+      final followersSnap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.id)
+          .collection('followers')
+          .get();
+
+      // Load following count
+      final followingSnap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.id)
+          .collection('following')
+          .get();
+
+      // Load posts count
+      final postsSnap = await FirebaseFirestore.instance
+          .collection('posts')
+          .where('userId', isEqualTo: user.id)
+          .get();
+
+      if (mounted) {
+        setState(() {
+          _followersCount = followersSnap.docs.length;
+          _followingCount = followingSnap.docs.length;
+          _postsCount = postsSnap.docs.length;
+        });
+      }
+    } on FirebaseException catch (e) {
+      // Permission denied or other Firestore errors — fail gracefully
+      if (kDebugMode) print('[ProfileScreen] Failed to load stats: ${e.code} ${e.message}');
+      return;
+    } catch (e) {
+      if (kDebugMode) print('[ProfileScreen] Unexpected error loading stats: $e');
+      return;
     }
   }
 
@@ -211,6 +222,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               Navigator.pop(context);
                               ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Profile updated!')));
                             } catch (e) {
+                              if (!mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to update profile: $e')));
                             }
                           },
@@ -518,19 +530,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _followUser(String targetUserId, dynamic currentUser) async {
     try {
-      await FirebaseFirestore.instance
+        await FirebaseFirestore.instance
           .collection('users')
           .doc(currentUser.id)
           .collection('following')
           .doc(targetUserId)
-          .set({'timestamp': DateTime.now()});
+          .set({'timestamp': FieldValue.serverTimestamp()});
       
-      await FirebaseFirestore.instance
+        await FirebaseFirestore.instance
           .collection('users')
           .doc(targetUserId)
           .collection('followers')
           .doc(currentUser.id)
-          .set({'timestamp': DateTime.now()});
+          .set({'timestamp': FieldValue.serverTimestamp()});
       
       _loadStats(); // Refresh counts
       if (mounted) {
@@ -538,6 +550,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         setState(() {}); // Refresh UI
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to follow: $e')));
     }
   }
@@ -564,6 +577,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         setState(() {}); // Refresh UI
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to unfollow: $e')));
     }
   }
@@ -591,6 +605,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 onTap: () async {
                   Navigator.pop(context);
                   await AuthService().signOut();
+                  if (!mounted) return;
                   Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => LoginScreen()));
                 },
               ),

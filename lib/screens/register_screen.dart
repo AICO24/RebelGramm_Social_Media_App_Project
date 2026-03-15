@@ -8,6 +8,8 @@ import '../screens/home_screen.dart';
 import '../providers/user_provider.dart';
 
 class RegisterScreen extends StatefulWidget {
+  const RegisterScreen({Key? key}) : super(key: key);
+
   @override
   _RegisterScreenState createState() => _RegisterScreenState();
 }
@@ -76,8 +78,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
         usernameController.text,
       );
       if (user != null) {
-        Provider.of<UserProvider>(context, listen: false).setUser(user);
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomeScreen()));
+        if (!mounted) return;
+        final provider = Provider.of<UserProvider>(context, listen: false);
+        provider.setUser(user);
+        provider.startListening(user.id);
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomeScreen()));
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(

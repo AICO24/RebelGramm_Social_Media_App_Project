@@ -4,7 +4,7 @@ class StoryWidget extends StatelessWidget {
   final String imageUrl;
   final String username;
 
-  StoryWidget({required this.imageUrl, required this.username});
+  const StoryWidget({Key? key, required this.imageUrl, required this.username}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {

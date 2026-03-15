@@ -8,6 +8,7 @@ class PostModel {
   final String imageUrl;
   final DateTime timestamp;
   final List<String> likes;
+  final int likeCount;
 
   PostModel({
     required this.id,
@@ -17,6 +18,7 @@ class PostModel {
     required this.imageUrl,
     required this.timestamp,
     required this.likes,
+    required this.likeCount,
   });
 
   Map<String, dynamic> toMap() {
@@ -28,6 +30,7 @@ class PostModel {
       // store a proper Firestore Timestamp rather than string so queries work
       'timestamp': timestamp,
       'likes': likes,
+      'likeCount': likeCount,
     };
   }
 
@@ -53,6 +56,7 @@ class PostModel {
       imageUrl: map['imageUrl'] ?? '',
       timestamp: ts,
       likes: List<String>.from(map['likes'] ?? []),
+      likeCount: (map['likeCount'] is int) ? map['likeCount'] as int : (map['likes'] != null ? (map['likes'] as List).length : 0),
     );
   }
 }

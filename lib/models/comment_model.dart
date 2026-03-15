@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class CommentModel {
   final String id;
   final String postId;
@@ -18,17 +20,29 @@ class CommentModel {
       'postId': postId,
       'userId': userId,
       'comment': comment,
-      'timestamp': timestamp.toIso8601String(),
+      'timestamp': Timestamp.fromDate(timestamp),
     };
   }
 
   factory CommentModel.fromMap(Map<String, dynamic> map, String id) {
+    DateTime ts;
+    final raw = map['timestamp'];
+    if (raw is Timestamp) {
+      ts = raw.toDate();
+    } else if (raw is DateTime) {
+      ts = raw;
+    } else if (raw is String) {
+      ts = DateTime.tryParse(raw) ?? DateTime.now();
+    } else {
+      ts = DateTime.now();
+    }
+
     return CommentModel(
       id: id,
       postId: map['postId'] ?? '',
       userId: map['userId'] ?? '',
       comment: map['comment'] ?? '',
-      timestamp: DateTime.parse(map['timestamp'] ?? DateTime.now().toIso8601String()),
+      timestamp: ts,
     );
   }
 }

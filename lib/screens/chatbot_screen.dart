@@ -7,6 +7,8 @@ import '../providers/user_provider.dart';
 import '../services/ai_service.dart';
 
 class ChatbotScreen extends StatefulWidget {
+  const ChatbotScreen({Key? key}) : super(key: key);
+
   @override
   _ChatbotScreenState createState() => _ChatbotScreenState();
 }
@@ -54,10 +56,11 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
         }
       }
       
+      if (!mounted) return;
       setState(() {
         _chatHistory = loadedHistory;
       });
-      
+
       // Update provider
       final aiProvider = Provider.of<AIProvider>(context, listen: false);
       aiProvider.clearMessages();
@@ -85,7 +88,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
           .add({
         'message': message,
         'type': isUser ? 'user' : 'ai',
-        'timestamp': DateTime.now(),
+        'timestamp': FieldValue.serverTimestamp(),
       });
     } catch (e) {
       // Silently fail - chat still works
@@ -115,6 +118,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
         _chatHistory.add({'ai': response});
       });
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('AI error: $e'),
@@ -122,7 +126,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
         ),
       );
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
       Future.delayed(Duration(milliseconds: 100), () {
         if (_scrollController.hasClients) {
           _scrollController.animateTo(
@@ -213,7 +217,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
             Text(
               'RebelGram Assistant',
               style: TextStyle(
-                color: Colors.black,
+                color: Colors.white,
                 fontSize: 17,
                 fontWeight: FontWeight.w600,
               ),
@@ -222,7 +226,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
         ),
         actions: [
           PopupMenuButton<String>(
-            icon: Icon(Icons.more_vert, color: Colors.black),
+            icon: Icon(Icons.more_vert, color: Colors.white),
             onSelected: (value) {
               if (value == 'clear') {
                 _clearChatHistory();
@@ -233,9 +237,9 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
                 value: 'clear',
                 child: Row(
                   children: [
-                    Icon(Icons.delete_outline, size: 20),
+                    Icon(Icons.delete_outline, size: 20, color: Colors.black87),
                     SizedBox(width: 8),
-                    Text('Clear conversation'),
+                    Text('Clear conversation', style: TextStyle(color: Colors.black87)),
                   ],
                 ),
               ),
@@ -341,9 +345,9 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
           // Input area - RebelGram style
           Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: Color(0xFF121212),
               border: Border(
-                top: BorderSide(color: Color(0xFFDBDBDB), width: 0.5),
+                top: BorderSide(color: Color(0xFF2C2C2C), width: 0.5),
               ),
             ),
             padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -370,7 +374,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
                             vertical: 10,
                           ),
                         ),
-                        style: TextStyle(fontSize: 15),
+                        style: TextStyle(fontSize: 15, color: Colors.white),
                         textInputAction: TextInputAction.send,
                         onSubmitted: (_) => _sendMessage(),
                       ),
@@ -419,13 +423,14 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
         batch.delete(doc.reference);
       }
       await batch.commit();
-      
+
+      if (!mounted) return;
       // Clear local state
       Provider.of<AIProvider>(context, listen: false).clearMessages();
       setState(() {
         _chatHistory = [];
       });
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Chat history cleared')),
       );

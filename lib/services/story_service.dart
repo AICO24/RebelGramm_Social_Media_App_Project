@@ -6,7 +6,13 @@ class StoryService {
 
   /// Create or update a story for [userId].
   Future<void> createStory(StoryModel story) async {
-    await _db.collection('stories').doc(story.userId).set(story.toMap());
+    // Write fields explicitly and use server timestamp to avoid mixed types
+    await _db.collection('stories').doc(story.userId).set({
+      'userId': story.userId,
+      'username': story.username,
+      'imageUrl': story.imageUrl,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
   }
 
   /// Stream stories for the specified list of [userIds].

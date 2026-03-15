@@ -10,8 +10,8 @@ import '../providers/user_provider.dart';
 class PostDetailScreen extends StatefulWidget {
   final PostModel post;
   final VoidCallback? onCommentAdded;
-  
-  PostDetailScreen({required this.post, this.onCommentAdded});
+
+  const PostDetailScreen({Key? key, required this.post, this.onCommentAdded}) : super(key: key);
 
   @override
   _PostDetailScreenState createState() => _PostDetailScreenState();
@@ -25,14 +25,13 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     if (commentText.isEmpty) return;
     
     final user = Provider.of<UserProvider>(context, listen: false).user!;
-    final comment = CommentModel(
-      id: Uuid().v4(),
-      postId: widget.post.id,
-      userId: user.id,
-      comment: commentText,
-      timestamp: DateTime.now(),
-    );
-    await FirebaseFirestore.instance.collection('comments').doc(comment.id).set(comment.toMap());
+    final id = Uuid().v4();
+    await FirebaseFirestore.instance.collection('comments').doc(id).set({
+      'postId': widget.post.id,
+      'userId': user.id,
+      'comment': commentText,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
     commentController.clear();
     
     // Call the callback if provided

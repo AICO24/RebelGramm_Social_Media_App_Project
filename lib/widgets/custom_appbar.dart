@@ -4,7 +4,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
   final List<Widget>? actions;
 
-  CustomAppBar({required this.title, this.actions});
+  const CustomAppBar({Key? key, required this.title, this.actions}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {

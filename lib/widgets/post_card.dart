@@ -4,13 +4,14 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/post_model.dart';
 import '../services/post_service.dart';
+import '../services/storage_service.dart';
 import '../screens/post_detail_screen.dart';
 
 class PostCard extends StatefulWidget {
   final PostModel post;
   final dynamic currentUser;
 
-  PostCard({required this.post, required this.currentUser});
+  const PostCard({Key? key, required this.post, required this.currentUser}) : super(key: key);
 
   @override
   _PostCardState createState() => _PostCardState();
@@ -22,6 +23,8 @@ class _PostCardState extends State<PostCard> {
   bool _loadingSave = false;
   bool _isFollowing = false;
   bool _loadingFollow = false;
+  bool _isLiked = false;
+  int _likeCount = 0;
   String? _displayName;
   int _commentCount = 0;
 
@@ -35,7 +38,22 @@ class _PostCardState extends State<PostCard> {
     }
     _checkSaved();
     _checkFollowing();
+    _checkIsLiked();
     _loadCommentCount();
+  }
+
+  Future<void> _checkIsLiked() async {
+    if (widget.currentUser == null) return;
+    try {
+      final liked = await _postService.isPostLiked(widget.post.id, widget.currentUser.id);
+      if (!mounted) return;
+      setState(() {
+        _isLiked = liked;
+        _likeCount = (widget.post.likes ?? []).length;
+      });
+    } catch (_) {
+      // ignore
+    }
   }
 
   Future<void> _loadCommentCount() async {
@@ -96,24 +114,26 @@ class _PostCardState extends State<PostCard> {
           .collection('followers')
           .doc(user.id);
 
+      final batch = FirebaseFirestore.instance.batch();
       if (_isFollowing) {
-        await followingRef.delete();
-        await followersRef.delete();
+        batch.delete(followingRef);
+        batch.delete(followersRef);
+        await batch.commit();
         if (!mounted) return;
         setState(() => _isFollowing = false);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Unfollowed')));
       } else {
-        await followingRef.set({'timestamp': DateTime.now()});
-        await followersRef.set({'timestamp': DateTime.now()});
+        batch.set(followingRef, {'timestamp': FieldValue.serverTimestamp()});
+        batch.set(followersRef, {'timestamp': FieldValue.serverTimestamp()});
+        await batch.commit();
         if (!mounted) return;
         setState(() => _isFollowing = true);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Following')));
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Follow action failed: $e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Follow action failed: $e')));
     } finally {
-      if (!mounted) return;
-      setState(() => _loadingFollow = false);
+      if (mounted) setState(() => _loadingFollow = false);
     }
   }
 
@@ -145,9 +165,11 @@ class _PostCardState extends State<PostCard> {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to update save: $e')));
     } finally {
-      setState(() {
-        _loadingSave = false;
-      });
+      if (mounted) {
+        setState(() {
+          _loadingSave = false;
+        });
+      }
     }
   }
 
@@ -190,17 +212,14 @@ class _PostCardState extends State<PostCard> {
               ),
               title: Text(fname, style: TextStyle(color: Colors.white)),
               onTap: () async {
-                await FirebaseFirestore.instance.collection('notifications').add({
-                  'userId': fid,
-                  'type': 'share',
-                  'message': 'shared a post with you',
-                  'fromUserId': user.id,
-                  'postId': widget.post.id,
-                  'timestamp': DateTime.now(),
-                });
-                if (!mounted) return;
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Post sent to $fname')));
+                try {
+                  await _postService.sharePost(widget.post.id, user.id, fid);
+                  if (!mounted) return;
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Post sent to $fname')));
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to send post: $e')));
+                }
               },
             );
           }).toList(),
@@ -224,7 +243,7 @@ class _PostCardState extends State<PostCard> {
   @override
   Widget build(BuildContext context) {
     final username = (_displayName ?? '').isNotEmpty ? _displayName! : widget.post.userId;
-    final isLiked = widget.post.likes.contains(widget.currentUser?.id);
+    final isLiked = _isLiked;
 
     return Container(
       margin: EdgeInsets.symmetric(vertical: 4, horizontal: 8),
@@ -293,22 +312,34 @@ class _PostCardState extends State<PostCard> {
             onDoubleTap: () {
               _postService.likePost(widget.post.id, widget.currentUser.id);
             },
-            child: AspectRatio(
+                child: AspectRatio(
               aspectRatio: 1,
-              child: CachedNetworkImage(
-                imageUrl: widget.post.imageUrl,
-                placeholder: (context, url) => Container(
-                  color: Colors.grey[900],
-                  child: Center(
-                    child: CircularProgressIndicator(color: Color(0xFF0095F6)),
-                  ),
-                ),
-                errorWidget: (context, url, error) => Container(
-                  color: Colors.grey[900],
-                  child: Center(child: Icon(Icons.broken_image, size: 50, color: Colors.grey[600])),
-                ),
-                width: double.infinity,
-                fit: BoxFit.cover,
+              child: FutureBuilder<String?>(
+                future: StorageService().getDownloadUrlSafe(widget.post.imageUrl),
+                builder: (context, snap) {
+                  final url = snap.data;
+                  if (url == null) {
+                    return Container(
+                      color: Colors.grey[900],
+                      child: Center(child: Icon(Icons.broken_image, size: 50, color: Colors.grey[600])),
+                    );
+                  }
+                  return CachedNetworkImage(
+                    imageUrl: url,
+                    placeholder: (context, url) => Container(
+                      color: Colors.grey[900],
+                      child: Center(
+                        child: CircularProgressIndicator(color: Color(0xFF0095F6)),
+                      ),
+                    ),
+                    errorWidget: (context, url, error) => Container(
+                      color: Colors.grey[900],
+                      child: Center(child: Icon(Icons.broken_image, size: 50, color: Colors.grey[600])),
+                    ),
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                  );
+                },
               ),
             ),
           ),
@@ -325,7 +356,21 @@ class _PostCardState extends State<PostCard> {
                     color: isLiked ? Colors.red : Colors.white,
                     size: 28,
                   ),
-                  onPressed: () => _postService.likePost(widget.post.id, widget.currentUser.id),
+                  onPressed: () async {
+                    final user = widget.currentUser;
+                    if (user == null) return;
+                    try {
+                      await _postService.likePost(widget.post.id, user.id);
+                      if (!mounted) return;
+                      setState(() {
+                        _isLiked = !_isLiked;
+                        _likeCount = _isLiked ? _likeCount + 1 : (_likeCount > 0 ? _likeCount - 1 : 0);
+                      });
+                    } catch (e) {
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to update like: $e')));
+                    }
+                  },
                 ),
                 IconButton(
                   icon: Icon(Icons.chat_bubble_outline, color: Colors.white, size: 26),
@@ -351,7 +396,7 @@ class _PostCardState extends State<PostCard> {
           Padding(
             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Text(
-              '${widget.post.likes.length} likes',
+              '$_likeCount likes',
               style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.white),
             ),
           ),
