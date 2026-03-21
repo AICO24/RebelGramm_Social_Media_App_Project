@@ -33,7 +33,7 @@ class _FriendSuggestionCardState extends State<FriendSuggestionCard> {
   Future<void> _check() async {
     if (widget.currentUserId.isEmpty) return;
     final doc = await FirebaseFirestore.instance
-        .collection('users')
+        .collection('followers')
         .doc(widget.currentUserId)
         .collection('following')
         .doc(widget.userId)
@@ -47,12 +47,12 @@ class _FriendSuggestionCardState extends State<FriendSuggestionCard> {
     setState(() => _loading = true);
     try {
       final followingRef = FirebaseFirestore.instance
-          .collection('users')
+          .collection('followers')
           .doc(widget.currentUserId)
           .collection('following')
           .doc(widget.userId);
       final followerRef = FirebaseFirestore.instance
-          .collection('users')
+          .collection('followers')
           .doc(widget.userId)
           .collection('followers')
           .doc(widget.currentUserId);

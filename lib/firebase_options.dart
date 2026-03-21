@@ -41,21 +41,21 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyB4W_p7nM8xqtOKzdMhuX5suXjeYWP5V44',
-    appId: '1:481163825232:web:bbbf7a7a81327089730155',
-    messagingSenderId: '481163825232',
-    projectId: 'my-own-social-media-app',
-    authDomain: 'my-own-social-media-app.firebaseapp.com',
-    storageBucket: 'my-own-social-media-app.firebasestorage.app',
-    measurementId: 'G-RT91GWD4QJ',
+    apiKey: 'AIzaSyCdXJZm8K9YVigJ9IVEo09NYJsZfZDGAMM',
+    appId: '1:452864114270:web:ca362590c18bf4fa947ecf',
+    messagingSenderId: '452864114270',
+    projectId: 'rebelgram-v2',
+    authDomain: 'rebelgram-v2.firebaseapp.com',
+    storageBucket: 'rebelgram-v2.firebasestorage.app',
+    measurementId: 'G-RHKXQ0KWGM',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyAzgs-MfC-q7faYoDwS1-33JfL60g-ZC_Y',
-    appId: '1:481163825232:android:7a3eab0617c8865a730155',
-    messagingSenderId: '481163825232',
-    projectId: 'my-own-social-media-app',
-    storageBucket: 'my-own-social-media-app.firebasestorage.app',
+    apiKey: 'AIzaSyAvGq4MCg3jvIvCPo8v_nqKHlMqpSFPWss',
+    appId: '1:452864114270:android:2d253452b914789c947ecf',
+    messagingSenderId: '452864114270',
+    projectId: 'rebelgram-v2',
+    storageBucket: 'rebelgram-v2.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
@@ -77,12 +77,13 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyB4W_p7nM8xqtOKzdMhuX5suXjeYWP5V44',
-    appId: '1:481163825232:web:52cc3d48850998b3730155',
-    messagingSenderId: '481163825232',
-    projectId: 'my-own-social-media-app',
-    authDomain: 'my-own-social-media-app.firebaseapp.com',
-    storageBucket: 'my-own-social-media-app.firebasestorage.app',
-    measurementId: 'G-PRBD6ZWL2E',
+    apiKey: 'AIzaSyCdXJZm8K9YVigJ9IVEo09NYJsZfZDGAMM',
+    appId: '1:452864114270:web:1b211679ca72ba09947ecf',
+    messagingSenderId: '452864114270',
+    projectId: 'rebelgram-v2',
+    authDomain: 'rebelgram-v2.firebaseapp.com',
+    storageBucket: 'rebelgram-v2.firebasestorage.app',
+    measurementId: 'G-WLMBD0CQE7',
   );
+
 }

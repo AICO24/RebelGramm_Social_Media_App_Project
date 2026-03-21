@@ -24,17 +24,20 @@ class StoryService {
       return _db
           .collection('stories')
           .where('userId', whereIn: userIds)
-          .orderBy('timestamp', descending: true)
           .snapshots()
-          .map((snap) => snap.docs
-              .map((d) => StoryModel.fromMap(d.data()))
-              .toList());
+          .map((snap) {
+            final stories = snap.docs.map((d) => StoryModel.fromMap(d.data())).toList();
+            stories.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+            return stories;
+          });
     } else {
-      return _db.collection('stories').orderBy('timestamp', descending: true).snapshots().map((snap) {
-        return snap.docs
+      return _db.collection('stories').snapshots().map((snap) {
+        final stories = snap.docs
             .map((d) => StoryModel.fromMap(d.data()))
             .where((s) => userIds.contains(s.userId))
             .toList();
+        stories.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+        return stories;
       });
     }
   }

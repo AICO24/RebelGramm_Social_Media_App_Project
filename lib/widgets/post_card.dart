@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../models/post_model.dart';
+import 'package:video_player/video_player.dart';
+import 'package:visibility_detector/visibility_detector.dart';
+import '../models/reel_model.dart';
 import '../services/post_service.dart';
 import '../services/storage_service.dart';
 import '../screens/post_detail_screen.dart';
 
 class PostCard extends StatefulWidget {
-  final PostModel post;
+  final dynamic post;
   final dynamic currentUser;
 
   const PostCard({Key? key, required this.post, required this.currentUser}) : super(key: key);
@@ -26,20 +27,44 @@ class _PostCardState extends State<PostCard> {
   bool _isLiked = false;
   int _likeCount = 0;
   String? _displayName;
+  String? _profilePic;
   int _commentCount = 0;
+  VideoPlayerController? _videoController;
+
+  bool get isReel => widget.post is ReelModel;
 
   @override
   void initState() {
     super.initState();
     _displayName = widget.post.username;
-    if ((_displayName ?? '').isEmpty) {
-      // fetch username from user record
-      _fetchUsername();
+    // Always fetch latest user profile data (pic etc) even if username is locally cached
+    _fetchUsername();
+    
+    _isLiked = widget.post.likes?.contains(widget.currentUser?.id) ?? false;
+    _likeCount = isReel ? (widget.post.likes?.length ?? 0) : widget.post.likeCount;
+
+    if (isReel) {
+      _videoController = VideoPlayerController.networkUrl(Uri.parse(widget.post.videoUrl))
+        ..initialize().then((_) {
+          if (mounted) setState(() {});
+          _videoController!.setLooping(true);
+          _videoController!.setVolume(0.0);
+          _videoController!.play();
+        });
     }
-    _checkSaved();
+
+    if (!isReel) {
+      _checkSaved();
+      _checkIsLiked();
+      _loadCommentCount();
+    }
     _checkFollowing();
-    _checkIsLiked();
-    _loadCommentCount();
+  }
+
+  @override
+  void dispose() {
+    _videoController?.dispose();
+    super.dispose();
   }
 
   Future<void> _checkIsLiked() async {
@@ -68,16 +93,21 @@ class _PostCardState extends State<PostCard> {
   Future<void> _fetchUsername() async {
     try {
       final doc = await FirebaseFirestore.instance.collection('users').doc(widget.post.userId).get();
-      final name = (doc.data()?['username'] ?? '').toString();
-      if (name.isNotEmpty) {
-        if (mounted) {
-          setState(() {
-            _displayName = name;
-          });
-        }
-        // Update the post document so future loads don't need fetch
-        await FirebaseFirestore.instance.collection('posts').doc(widget.post.id).update({'username': name});
+      final data = doc.data() as Map<String, dynamic>?;
+      if (data == null) return;
+      
+      final name = (data['username'] ?? '').toString();
+      final pic = (data['profilePic'] ?? '').toString();
+      
+      if (mounted) {
+        setState(() {
+          if (name.isNotEmpty) _displayName = name;
+          if (pic.isNotEmpty) _profilePic = pic;
+        });
       }
+      
+      // Update the post document so future loads don't need fetch
+      if (name.isNotEmpty) await FirebaseFirestore.instance.collection('posts').doc(widget.post.id).update({'username': name});
     } catch (e) {
       // Silently fail - will show userId as fallback
     }
@@ -86,7 +116,7 @@ class _PostCardState extends State<PostCard> {
   Future<void> _checkFollowing() async {
     if (widget.currentUser == null) return;
     final doc = await FirebaseFirestore.instance
-        .collection('users')
+        .collection('followers')
         .doc(widget.currentUser.id)
         .collection('following')
         .doc(widget.post.userId)
@@ -104,12 +134,12 @@ class _PostCardState extends State<PostCard> {
     setState(() => _loadingFollow = true);
     try {
       final followingRef = FirebaseFirestore.instance
-          .collection('users')
+          .collection('followers')
           .doc(user.id)
           .collection('following')
           .doc(widget.post.userId);
       final followersRef = FirebaseFirestore.instance
-          .collection('users')
+          .collection('followers')
           .doc(widget.post.userId)
           .collection('followers')
           .doc(user.id);
@@ -177,7 +207,7 @@ class _PostCardState extends State<PostCard> {
     final user = widget.currentUser;
     if (user == null) return;
     final follows = await FirebaseFirestore.instance
-        .collection('users')
+        .collection('followers')
         .doc(user.id)
         .collection('following')
         .get();
@@ -228,28 +258,16 @@ class _PostCardState extends State<PostCard> {
     );
   }
 
-  Future<void> _repost() async {
-    final user = widget.currentUser;
-    if (user == null) return;
-    try {
-      await _postService.repost(widget.post, user.id, user.username);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Reposted')));
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed repost: $e')));
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final username = (_displayName ?? '').isNotEmpty ? _displayName! : widget.post.userId;
     final isLiked = _isLiked;
+    final iconColor = Theme.of(context).iconTheme.color;
+    final textColor = Theme.of(context).textTheme.bodyMedium?.color;
 
     return Container(
-      margin: EdgeInsets.symmetric(vertical: 4, horizontal: 8),
       decoration: BoxDecoration(
-        color: Color(0xFF1E1E1E),
-        borderRadius: BorderRadius.circular(12),
+        color: Theme.of(context).scaffoldBackgroundColor,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -260,15 +278,19 @@ class _PostCardState extends State<PostCard> {
             child: Row(
               children: [
                 CircleAvatar(
-                  radius: 18,
-                  backgroundColor: Colors.grey[800],
-                  child: Text(
-                    username.isNotEmpty ? username[0].toUpperCase() : '?',
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  radius: 16,
+                  backgroundColor: Colors.grey.shade300,
+                  backgroundImage: (_profilePic ?? '').isNotEmpty ? NetworkImage(_profilePic!) : null,
+                  child: (_profilePic ?? '').isEmpty
+                      ? Text(
+                          username.isNotEmpty ? username[0].toUpperCase() : '?',
+                          style: TextStyle(
+                            color: Colors.black87,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                        )
+                      : null,
                 ),
                 SizedBox(width: 10),
                 Expanded(
@@ -288,7 +310,7 @@ class _PostCardState extends State<PostCard> {
                     child: Text(
                       _isFollowing ? 'Following' : 'Follow',
                       style: TextStyle(
-                        color: _isFollowing ? Colors.grey[400] : Color(0xFF0095F6),
+                        color: _isFollowing ? Colors.grey : Color(0xFF0095F6),
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -300,114 +322,193 @@ class _PostCardState extends State<PostCard> {
                   ),
                 ),
                 IconButton(
-                  icon: Icon(Icons.more_horiz, color: Colors.grey[600]),
+                  icon: Icon(Icons.more_horiz, color: iconColor),
                   onPressed: () => _showPostOptions(context),
+                  constraints: BoxConstraints(),
+                  padding: EdgeInsets.zero,
                 ),
               ],
             ),
           ),
           
-          // image
+          // image or video
           GestureDetector(
             onDoubleTap: () {
-              _postService.likePost(widget.post.id, widget.currentUser.id);
-            },
-                child: AspectRatio(
-              aspectRatio: 1,
-              child: FutureBuilder<String?>(
-                future: StorageService().getDownloadUrlSafe(widget.post.imageUrl),
-                builder: (context, snap) {
-                  final url = snap.data;
-                  if (url == null) {
-                    return Container(
-                      color: Colors.grey[900],
-                      child: Center(child: Icon(Icons.broken_image, size: 50, color: Colors.grey[600])),
-                    );
+              if (widget.currentUser != null) {
+                if (!isReel) _postService.likePost(widget.post.id, widget.currentUser.id);
+                if (!mounted) return;
+                setState(() {
+                  if (!_isLiked) {
+                    _isLiked = true;
+                    _likeCount++;
                   }
-                  return CachedNetworkImage(
-                    imageUrl: url,
-                    placeholder: (context, url) => Container(
-                      color: Colors.grey[900],
-                      child: Center(
-                        child: CircularProgressIndicator(color: Color(0xFF0095F6)),
+                });
+              }
+            },
+            onTap: () {
+              if (isReel && _videoController != null && _videoController!.value.isInitialized) {
+                setState(() {
+                  _videoController!.value.isPlaying ? _videoController!.pause() : _videoController!.play();
+                });
+              }
+            },
+            child: AspectRatio(
+              aspectRatio: isReel ? (_videoController?.value.isInitialized == true ? _videoController!.value.aspectRatio : 4/5) : 1,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  isReel 
+                    ? (_videoController != null && _videoController!.value.isInitialized)
+                        ? VisibilityDetector(
+                            key: Key('feed_video_${widget.post.id}'),
+                            onVisibilityChanged: (info) {
+                              if (info.visibleFraction > 0.5) {
+                                _videoController?.play();
+                              } else {
+                                _videoController?.pause();
+                              }
+                            },
+                            child: VideoPlayer(_videoController!),
+                          )
+                        : Container(color: Colors.black, child: Center(child: CircularProgressIndicator(color: Color(0xFF0095F6))))
+                    : FutureBuilder<String?>(
+                        future: StorageService().getDownloadUrlSafe(widget.post.imageUrl),
+                        builder: (context, snap) {
+                          final url = snap.data;
+                          if (url == null) {
+                            return Container(
+                              color: Colors.grey.shade300,
+                              child: Center(child: Icon(Icons.broken_image, size: 50, color: Colors.grey)),
+                            );
+                          }
+                          return CachedNetworkImage(
+                            imageUrl: url,
+                            placeholder: (context, url) => Container(
+                              color: Colors.grey.shade300,
+                              child: Center(
+                                child: CircularProgressIndicator(color: Color(0xFF0095F6)),
+                              ),
+                            ),
+                            errorWidget: (context, url, error) => Container(
+                              color: Colors.grey.shade300,
+                              child: Center(child: Icon(Icons.broken_image, size: 50, color: Colors.grey)),
+                            ),
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                          );
+                        },
+                      ),
+                  
+                  // Reels Badges
+                  if (isReel)
+                    Positioned(
+                      top: 10,
+                      right: 12,
+                      child: Icon(Icons.movie_creation_outlined, color: Colors.white, size: 24),
+                    ),
+                  
+                  if (isReel && _videoController != null && _videoController!.value.isInitialized)
+                    Positioned(
+                      bottom: 10,
+                      right: 12,
+                      child: Container(
+                        padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                        decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(4)),
+                        child: Text(widget.post.duration ?? '0:15', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                       ),
                     ),
-                    errorWidget: (context, url, error) => Container(
-                      color: Colors.grey[900],
-                      child: Center(child: Icon(Icons.broken_image, size: 50, color: Colors.grey[600])),
-                    ),
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                  );
-                },
+                ],
               ),
             ),
           ),
           
           // Action buttons
           Padding(
-            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                IconButton(
-                  icon: Icon(
-                    isLiked ? Icons.favorite : Icons.favorite_border,
-                    color: isLiked ? Colors.red : Colors.white,
-                    size: 28,
-                  ),
-                  onPressed: () async {
-                    final user = widget.currentUser;
-                    if (user == null) return;
-                    try {
-                      await _postService.likePost(widget.post.id, user.id);
-                      if (!mounted) return;
-                      setState(() {
-                        _isLiked = !_isLiked;
-                        _likeCount = _isLiked ? _likeCount + 1 : (_likeCount > 0 ? _likeCount - 1 : 0);
-                      });
-                    } catch (e) {
-                      if (!mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to update like: $e')));
-                    }
-                  },
-                ),
-                IconButton(
-                  icon: Icon(Icons.chat_bubble_outline, color: Colors.white, size: 26),
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PostDetailScreen(post: widget.post))),
-                ),
-                IconButton(
-                  icon: Icon(Icons.send_outlined, color: Colors.white, size: 26),
-                  onPressed: _showShareSheet,
-                ),
-                IconButton(
-                  icon: FaIcon(FontAwesomeIcons.retweet, color: Colors.white, size: 24),
-                  onPressed: _repost,
-                ),
-                IconButton(
-                  icon: Icon(_isSaved ? Icons.bookmark : Icons.bookmark_border, color: Colors.white, size: 26),
-                  onPressed: _toggleSave,
-                ),
-              ],
-            ),
-          ),
+             padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+             child: Row(
+               children: [
+                 IconButton(
+                   icon: Icon(
+                     isLiked ? Icons.favorite : Icons.favorite_border,
+                     color: isLiked ? Colors.red : iconColor,
+                     size: 26,
+                   ),
+                   onPressed: () async {
+                     final user = widget.currentUser;
+                     if (user == null) return;
+                     try {
+                       await _postService.likePost(widget.post.id, user.id);
+                       if (!mounted) return;
+                       setState(() {
+                         _isLiked = !_isLiked;
+                         _likeCount = _isLiked ? _likeCount + 1 : (_likeCount > 0 ? _likeCount - 1 : 0);
+                       });
+                     } catch (e) {
+                       if (!mounted) return;
+                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to update like: $e')));
+                     }
+                   },
+                 ),
+                 IconButton(
+                   icon: Icon(Icons.chat_bubble_outline, color: iconColor, size: 24),
+                   onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PostDetailScreen(post: widget.post))),
+                 ),
+                 IconButton(
+                   icon: Icon(Icons.repeat, color: iconColor, size: 24),
+                   onPressed: () { 
+                     // Placeholder for fully functioning repost
+                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Post Reposted!')));
+                   },
+                 ),
+                 IconButton(
+                   icon: Icon(Icons.send_outlined, color: iconColor, size: 24),
+                   onPressed: _showShareSheet,
+                 ),
+                 Spacer(),
+                 IconButton(
+                   icon: Icon(_isSaved ? Icons.bookmark : Icons.bookmark_border, color: iconColor, size: 26),
+                   onPressed: _toggleSave,
+                 ),
+               ],
+             ),
+           ),
           
           // Likes count
           Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 0),
             child: Text(
               '$_likeCount likes',
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.white),
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
             ),
           ),
+          
+          // Music / Audio info
+          if (isReel)
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: Row(
+                children: [
+                  Icon(Icons.library_music_outlined, size: 14, color: textColor),
+                  SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      '${widget.post.musicArtist} • ${widget.post.musicTitle}',
+                      style: TextStyle(color: textColor, fontSize: 13, fontWeight: FontWeight.w400),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           
           // Caption
           if (widget.post.caption.isNotEmpty)
             Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               child: RichText(
                 text: TextSpan(
-                  style: TextStyle(color: Colors.white, fontSize: 14),
+                  style: TextStyle(color: textColor, fontSize: 14),
                   children: [
                     TextSpan(text: username, style: TextStyle(fontWeight: FontWeight.w600)),
                     TextSpan(text: '  ${widget.post.caption}'),
@@ -417,29 +518,28 @@ class _PostCardState extends State<PostCard> {
             ),
           
           // View comments
-          GestureDetector(
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PostDetailScreen(post: widget.post, onCommentAdded: _loadCommentCount))),
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: Text(
-                _commentCount > 0 
-                    ? 'View all $_commentCount comments' 
-                    : 'Add a comment...',
-                style: TextStyle(color: Colors.grey[400], fontSize: 14),
+          if (_commentCount > 0)
+            GestureDetector(
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PostDetailScreen(post: widget.post, onCommentAdded: _loadCommentCount))),
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                child: Text(
+                  'View all $_commentCount comments',
+                  style: TextStyle(color: Colors.grey, fontSize: 14),
+                ),
               ),
             ),
-          ),
           
           // Timestamp
           Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             child: Text(
               _formatTimestamp(widget.post.timestamp),
-              style: TextStyle(color: Colors.grey[500], fontSize: 12),
+              style: TextStyle(color: Colors.grey, fontSize: 12),
             ),
           ),
           
-          Divider(height: 1),
+          Divider(height: 8, thickness: 0.5),
         ],
       ),
     );

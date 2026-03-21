@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 
 import '../providers/user_provider.dart';
+import '../providers/theme_provider.dart';
 import '../services/auth_service.dart';
 import '../services/post_service.dart';
 import '../services/storage_service.dart';
@@ -14,6 +15,13 @@ import '../screens/login_screen.dart';
 import '../screens/add_post_screen.dart';
 import '../models/post_model.dart';
 import '../models/user_model.dart';
+import 'package:share_plus/share_plus.dart';
+import '../screens/user_posts_grid_screen.dart';
+import '../screens/followers_list_screen.dart';
+import '../screens/following_list_screen.dart';
+import '../widgets/friend_suggestion_card.dart';
+import '../screens/post_detail_screen.dart';
+import '../screens/discover_people_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -42,14 +50,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       // Load followers count
       final followersSnap = await FirebaseFirestore.instance
-          .collection('users')
+          .collection('followers')
           .doc(user.id)
           .collection('followers')
           .get();
 
       // Load following count
       final followingSnap = await FirebaseFirestore.instance
-          .collection('users')
+          .collection('followers')
           .doc(user.id)
           .collection('following')
           .get();
@@ -85,7 +93,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Color(0xFF1E1E1E),
+      backgroundColor: Theme.of(context).cardColor,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -135,7 +143,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 onTap: () async {
                                   final source = await showModalBottomSheet<ImageSource>(
                                     context: context,
-                                    backgroundColor: Color(0xFF1E1E1E),
+                                    backgroundColor: Theme.of(context).cardColor,
                                     builder: (ctx) => SafeArea(
                                       child: Wrap(children: [
                                         ListTile(
@@ -172,7 +180,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       SizedBox(height: 16),
                       Container(
-                        decoration: BoxDecoration(color: Color(0xFF2C2C2C), borderRadius: BorderRadius.circular(8)),
+                        decoration: BoxDecoration(color: Theme.of(context).dividerColor, borderRadius: BorderRadius.circular(8)),
                         child: TextField(
                           controller: usernameController,
                           decoration: InputDecoration(
@@ -252,39 +260,96 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final user = Provider.of<UserProvider>(context).user!;
     
     return Scaffold(
-      backgroundColor: Color(0xFF121212),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: Color(0xFF121212),
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
         elevation: 0,
-        title: Text(user.username, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-        iconTheme: IconThemeData(color: Colors.white),
+        title: Text(user.username, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 22)),
+        centerTitle: false,
+        iconTheme: Theme.of(context).iconTheme,
         actions: [
-          IconButton(icon: Icon(Icons.add), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AddPostScreen()))),
-          IconButton(icon: Icon(Icons.more_vert), onPressed: () => _showLogoutMenu(context)),
+          IconButton(icon: Icon(Icons.add_box_outlined), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AddPostScreen()))),
+          IconButton(icon: Icon(Icons.menu), onPressed: () => _showLogoutMenu(context)),
         ],
       ),
-      body: Column(
-        children: [
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
           Container(
-            color: Color(0xFF1E1E1E),
+            color: Theme.of(context).scaffoldBackgroundColor,
             padding: EdgeInsets.all(16),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    CircleAvatar(radius: 44, backgroundColor: Colors.grey[800], backgroundImage: user.profilePic.isNotEmpty ? NetworkImage(user.profilePic) : null, child: user.profilePic.isEmpty ? Icon(Icons.person, size: 44, color: Colors.grey[400]) : null),
+                    CircleAvatar(
+                      radius: 40,
+                      backgroundColor: Colors.grey.shade300,
+                      backgroundImage: user.profilePic.isNotEmpty ? NetworkImage(user.profilePic) : null,
+                      child: user.profilePic.isEmpty ? Icon(Icons.person, size: 40, color: Colors.grey.shade400) : null,
+                    ),
                     SizedBox(width: 24),
-                    Expanded(child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [_buildStatColumn('Posts', _postsCount.toString()), _buildStatColumn('Followers', _followersCount.toString()), _buildStatColumn('Following', _followingCount.toString())])),
+                    Expanded(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _buildStatColumn('Posts', _postsCount.toString(), () {
+                            Navigator.push(context, MaterialPageRoute(builder: (_) => UserPostsGridScreen(userId: user.id)));
+                          }),
+                          _buildStatColumn('Followers', _followersCount.toString(), () {
+                            Navigator.push(context, MaterialPageRoute(builder: (_) => FollowersListScreen(userId: user.id)));
+                          }),
+                          _buildStatColumn('Following', _followingCount.toString(), () {
+                            Navigator.push(context, MaterialPageRoute(builder: (_) => FollowingListScreen(userId: user.id)));
+                          })
+                        ]
+                      )
+                    ),
                   ],
                 ),
+                SizedBox(height: 12),
+                Text(user.username, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                if (user.email.isNotEmpty) SizedBox(height: 2),
+                if (user.email.isNotEmpty) Text(user.email, style: TextStyle(fontSize: 14)),
                 SizedBox(height: 16),
-                Align(alignment: Alignment.centerLeft, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(user.username, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16, color: Colors.white)), SizedBox(height: 4), Text(user.email, style: TextStyle(color: Colors.grey[400], fontSize: 14))])),
-                SizedBox(height: 16),
-                SizedBox(width: double.infinity, child: OutlinedButton(onPressed: () => _showEditProfileDialog(context), style: OutlinedButton.styleFrom(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), side: BorderSide(color: Color(0xFF444444))), child: Text('Edit Profile', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.white)))),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => _showEditProfileDialog(context),
+                        style: OutlinedButton.styleFrom(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          side: BorderSide(color: Theme.of(context).dividerColor),
+                          backgroundColor: Theme.of(context).cardColor,
+                        ),
+                        child: Text('Edit Profile', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Theme.of(context).textTheme.bodyMedium?.color)),
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () {
+                          final String profileUrl = "https://rebelgram.com/user/${user.username}";
+                          Share.share('Check out ${user.username} on RebelGram!\n$profileUrl');
+                        },
+                        style: OutlinedButton.styleFrom(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          side: BorderSide(color: Theme.of(context).dividerColor),
+                          backgroundColor: Theme.of(context).cardColor,
+                        ),
+                        child: Text('Share profile', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Theme.of(context).textTheme.bodyMedium?.color)),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
-          Divider(height: 1, color: Colors.grey[800]),
+          _buildDiscoverPeopleCarousel(user),
+          Divider(height: 1, color: Theme.of(context).dividerColor),
           // Tab bar for Posts, Saved, Suggested
           Container(
             color: Color(0xFF1E1E1E),
@@ -297,10 +362,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           Divider(height: 1, color: Colors.grey[800]),
-          Expanded(
-            child: _buildTabContent(user),
-          ),
+          _buildTabContent(user),
         ],
+      ),
       ),
     );
   }
@@ -309,6 +373,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildTab(String label, IconData icon, int index) {
     final isSelected = _selectedTab == index;
+    final themeIconColor = Theme.of(context).iconTheme.color;
     return GestureDetector(
       onTap: () => setState(() => _selectedTab = index),
       child: Container(
@@ -316,15 +381,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
         decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(
-              color: isSelected ? Colors.white : Colors.transparent,
-              width: 1,
+              color: isSelected ? (themeIconColor ?? Colors.black) : Colors.transparent,
+              width: 1.5,
             ),
           ),
         ),
         child: Icon(
           icon,
-          color: isSelected ? Colors.white : Colors.grey[600],
-          size: 24,
+          color: isSelected ? themeIconColor : Colors.grey,
+          size: 26,
         ),
       ),
     );
@@ -362,12 +427,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }
         
         return GridView.builder(
+          shrinkWrap: true,
+          physics: NeverScrollableScrollPhysics(),
           padding: EdgeInsets.all(2),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, crossAxisSpacing: 2, mainAxisSpacing: 2),
           itemCount: posts.length,
           itemBuilder: (context, index) {
             final post = posts[index];
-            return CachedNetworkImage(imageUrl: post.imageUrl, fit: BoxFit.cover, placeholder: (context, url) => Container(color: Colors.grey[800]), errorWidget: (context, url, error) => Container(color: Colors.grey[800], child: Icon(Icons.broken_image, color: Colors.grey[500])));
+            return GestureDetector(
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PostDetailScreen(post: post))),
+              child: CachedNetworkImage(imageUrl: post.imageUrl, fit: BoxFit.cover, placeholder: (context, url) => Container(color: Colors.grey[800]), errorWidget: (context, url, error) => Container(color: Colors.grey[800], child: Icon(Icons.broken_image, color: Colors.grey[500]))),
+            );
           },
         );
       },
@@ -410,6 +480,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             }
             
             return GridView.builder(
+              shrinkWrap: true,
+              physics: NeverScrollableScrollPhysics(),
               padding: EdgeInsets.all(2),
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, crossAxisSpacing: 2, mainAxisSpacing: 2),
               itemCount: posts.length,
@@ -459,13 +531,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }
         
         return ListView.builder(
+          shrinkWrap: true,
+          physics: NeverScrollableScrollPhysics(),
           padding: EdgeInsets.all(8),
           itemCount: allUsers.length,
           itemBuilder: (context, index) {
             final suggestedUser = allUsers[index];
             return FutureBuilder<DocumentSnapshot>(
               future: FirebaseFirestore.instance
-                  .collection('users')
+                  .collection('followers')
                   .doc(user.id)
                   .collection('following')
                   .doc(suggestedUser.id)
@@ -531,14 +605,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _followUser(String targetUserId, dynamic currentUser) async {
     try {
         await FirebaseFirestore.instance
-          .collection('users')
+          .collection('followers')
           .doc(currentUser.id)
           .collection('following')
           .doc(targetUserId)
           .set({'timestamp': FieldValue.serverTimestamp()});
       
         await FirebaseFirestore.instance
-          .collection('users')
+          .collection('followers')
           .doc(targetUserId)
           .collection('followers')
           .doc(currentUser.id)
@@ -558,14 +632,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _unfollowUser(String targetUserId, dynamic currentUser) async {
     try {
       await FirebaseFirestore.instance
-          .collection('users')
+          .collection('followers')
           .doc(currentUser.id)
           .collection('following')
           .doc(targetUserId)
           .delete();
       
       await FirebaseFirestore.instance
-          .collection('users')
+          .collection('followers')
           .doc(targetUserId)
           .collection('followers')
           .doc(currentUser.id)
@@ -582,14 +656,70 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Widget _buildStatColumn(String label, String value) {
-    return Column(children: [Text(value, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18, color: Colors.white)), SizedBox(height: 4), Text(label, style: TextStyle(color: Colors.grey[500], fontSize: 14))]);
+  Widget _buildStatColumn(String label, String value, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(children: [Text(value, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)), Text(label, style: TextStyle(color: Colors.grey, fontSize: 13))]),
+    );
+  }
+
+  Widget _buildDiscoverPeopleCarousel(dynamic currentUser) {
+    return FutureBuilder<QuerySnapshot>(
+      future: FirebaseFirestore.instance.collection('users').get(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return SizedBox.shrink();
+        final allUsers = snapshot.data!.docs
+            .map((d) => UserModel.fromMap(d.data() as Map<String, dynamic>, d.id))
+            .where((u) => u.id != currentUser.id)
+            .toList();
+        
+        if (allUsers.isEmpty) return SizedBox.shrink();
+        
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Discover people', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                  GestureDetector(
+                    child: Text('See all', style: TextStyle(color: Color(0xFF0095F6), fontWeight: FontWeight.w600, fontSize: 14)),
+                    onTap: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => DiscoverPeopleScreen()));
+                    },
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(
+              height: 220,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: EdgeInsets.symmetric(horizontal: 8),
+                itemCount: allUsers.length > 10 ? 10 : allUsers.length,
+                itemBuilder: (context, index) {
+                  final targetUser = allUsers[index];
+                  return FriendSuggestionCard(
+                    userId: targetUser.id,
+                    username: targetUser.username,
+                    profilePic: targetUser.profilePic,
+                    currentUserId: currentUser.id,
+                  );
+                },
+              ),
+            ),
+            SizedBox(height: 8),
+          ],
+        );
+      },
+    );
   }
 
   void _showLogoutMenu(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Color(0xFF1E1E1E),
+      backgroundColor: Theme.of(context).cardColor,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (context) {
         return SafeArea(
@@ -599,6 +729,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
               SizedBox(height: 8),
               Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
               SizedBox(height: 16),
+              Consumer<ThemeProvider>(
+                builder: (context, themeProvider, child) {
+                  final isDarkMode = themeProvider.themeMode == ThemeMode.dark;
+                  return SwitchListTile(
+                    title: Text('Dark Mode', style: TextStyle(fontWeight: FontWeight.w600)),
+                    secondary: Icon(Icons.dark_mode, color: Theme.of(context).iconTheme.color),
+                    value: isDarkMode,
+                    onChanged: (value) {
+                      themeProvider.toggleTheme(value);
+                      Navigator.pop(context);
+                    },
+                  );
+                },
+              ),
               ListTile(
                 leading: Icon(Icons.logout, color: Colors.red),
                 title: Text('Log out', style: TextStyle(color: Colors.red)),

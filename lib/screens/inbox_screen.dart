@@ -375,6 +375,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final ScrollController _scrollController = ScrollController();
   String _otherUsername = 'User';
   String _otherProfilePic = '';
+  bool _isSending = false;
 
   @override
   void initState() {
@@ -537,10 +538,19 @@ class _ChatScreenState extends State<ChatScreen> {
                       color: Color(0xFF0095F6),
                       shape: BoxShape.circle,
                     ),
-                    child: IconButton(
-                      icon: Icon(Icons.send, color: Colors.white),
-                      onPressed: _sendMessage,
-                    ),
+                      child: _isSending
+                          ? Padding(
+                              padding: const EdgeInsets.all(12.0),
+                              child: SizedBox(
+                                width: 20, 
+                                height: 20, 
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              ),
+                            )
+                          : IconButton(
+                              icon: Icon(Icons.send, color: Colors.white),
+                              onPressed: _sendMessage,
+                            ),
                   ),
                 ],
               ),
@@ -555,23 +565,41 @@ class _ChatScreenState extends State<ChatScreen> {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
-    await _messageService.sendMessage(
-      widget.currentUserId,
-      widget.otherUserId,
-      text,
-    );
-    
-    _messageController.clear();
-    
-    // Scroll to bottom
-    Future.delayed(Duration(milliseconds: 100), () {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: Duration(milliseconds: 300),
-          curve: Curves.easeOut,
+    setState(() {
+      _isSending = true;
+    });
+
+    try {
+      await _messageService.sendMessage(
+        widget.currentUserId,
+        widget.otherUserId,
+        text,
+      ).timeout(const Duration(seconds: 1), onTimeout: () => null);
+      
+      _messageController.clear();
+      
+      // Scroll to bottom
+      Future.delayed(Duration(milliseconds: 100), () {
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send message: $e')),
         );
       }
-    });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSending = false;
+        });
+      }
+    }
   }
 }

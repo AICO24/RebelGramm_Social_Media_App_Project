@@ -1,27 +1,45 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:uuid/uuid.dart';
 import '../models/message_model.dart';
 
 class MessageService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  /// Send a direct message from [senderId] to [receiverId]
-  Future<void> sendMessage(String senderId, String receiverId, String message) async {
+  Future<void> sendMessage(String senderId, String receiverId, String messageText) async {
     // Validate message content
-    final trimmedMessage = message.trim();
+    final trimmedMessage = messageText.trim();
     if (trimmedMessage.isEmpty) return;
     if (trimmedMessage.length > 1000) {
       throw Exception('Message too long (max 1000 characters)');
     }
     
-    final id = Uuid().v4();
-    await _db.collection('messages').doc(id).set({
-      'senderId': senderId,
-      'receiverId': receiverId,
-      'message': trimmedMessage,
-      'timestamp': FieldValue.serverTimestamp(),
-      'isRead': false,
-    });
+    try {
+      final id = _db.collection('messages').doc().id;
+      final messageData = {
+        'id': id,
+        'senderId': senderId,
+        'receiverId': receiverId,
+        'message': trimmedMessage,
+        'timestamp': FieldValue.serverTimestamp(),
+        'isRead': false,
+      };
+
+      await _db.collection('messages').doc(id).set(messageData);
+
+      final conversationId = _getConversationId(senderId, receiverId);
+      await _db
+          .collection('conversations')
+          .doc(conversationId)
+          .collection('messages')
+          .doc(id)
+          .set(messageData);
+    } catch (e) {
+      print('Error sending message: $e');
+      throw Exception('Failed to send message: $e');
+    }
+  }
+
+  String _getConversationId(String user1, String user2) {
+    return user1.compareTo(user2) < 0 ? '$user1-$user2' : '$user2-$user1';
   }
 
   /// Get a stream of messages between two users

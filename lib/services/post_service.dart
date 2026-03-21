@@ -46,17 +46,22 @@ class PostService {
     if (currentUserId.isEmpty) return fetchPostsPageSnapshot(startAfter: startAfter, pageSize: pageSize);
 
     final followingSnapshot = await _db
-        .collection('users')
+        .collection('followers')
         .doc(currentUserId)
         .collection('following')
         .get();
     final followingIds = followingSnapshot.docs.map((doc) => doc.id).toList();
     if (!followingIds.contains(currentUserId)) followingIds.add(currentUserId);
 
-    // Firestore whereIn supports up to 10 values
-    if (followingIds.length > 10) return fetchPostsPageSnapshot(startAfter: startAfter, pageSize: pageSize);
+    List<String> queryIds = followingIds;
+    if (queryIds.length > 10) {
+      queryIds = queryIds.sublist(0, 10); // Firestore whereIn limit is 10
+    }
+    
+    // Safety check for empty arrays
+    if (queryIds.isEmpty) return fetchPostsPageSnapshot(startAfter: startAfter, pageSize: pageSize);
 
-    Query q = _db.collection('posts').where('userId', whereIn: followingIds).orderBy('timestamp', descending: true).limit(pageSize);
+    Query q = _db.collection('posts').where('userId', whereIn: queryIds).orderBy('timestamp', descending: true).limit(pageSize);
     if (startAfter != null) q = q.startAfterDocument(startAfter);
     return await q.get();
   }
@@ -71,7 +76,7 @@ class PostService {
 
     // Get list of user IDs that current user follows
     final followingSnapshot = await _db
-        .collection('users')
+        .collection('followers')
         .doc(currentUserId)
         .collection('following')
         .get();
@@ -83,8 +88,12 @@ class PostService {
       followingIds.add(currentUserId);
     }
 
-    // Firestore limits whereIn to 10 elements; if over that, just stream all
-    if (followingIds.length > 10) {
+    List<String> queryIds = followingIds;
+    if (queryIds.length > 10) {
+      queryIds = queryIds.sublist(0, 10);
+    }
+    
+    if (queryIds.isEmpty) {
       yield* fetchPosts();
       return;
     }
@@ -93,7 +102,7 @@ class PostService {
       // Fetch posts from followed users
       yield* _db
           .collection('posts')
-          .where('userId', whereIn: followingIds)
+          .where('userId', whereIn: queryIds)
           .orderBy('timestamp', descending: true)
           .snapshots()
             .map((snapshot) => snapshot.docs

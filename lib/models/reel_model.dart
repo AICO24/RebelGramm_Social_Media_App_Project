@@ -6,6 +6,9 @@ class ReelModel {
   final String username;
   final String caption;
   final String videoUrl;
+  final String musicArtist;
+  final String musicTitle;
+  final String duration;
   final DateTime timestamp;
   final List<String> likes;
 
@@ -15,6 +18,9 @@ class ReelModel {
     required this.username,
     required this.caption,
     required this.videoUrl,
+    this.musicArtist = 'Original Audio',
+    this.musicTitle = 'RebelGram',
+    this.duration = '0:15',
     required this.timestamp,
     required this.likes,
   });
@@ -25,6 +31,9 @@ class ReelModel {
       'username': username,
       'caption': caption,
       'videoUrl': videoUrl,
+      'musicArtist': musicArtist,
+      'musicTitle': musicTitle,
+      'duration': duration,
       'timestamp': timestamp,
       'likes': likes,
     };
@@ -49,6 +58,9 @@ class ReelModel {
       username: map['username'] ?? '',
       caption: map['caption'] ?? '',
       videoUrl: map['videoUrl'] ?? '',
+      musicArtist: map['musicArtist'] ?? 'Original Audio',
+      musicTitle: map['musicTitle'] ?? 'User Audio',
+      duration: map['duration'] ?? '0:15',
       timestamp: ts,
       likes: List<String>.from(map['likes'] ?? []),
     );

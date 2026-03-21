@@ -1,25 +1,27 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_svg/flutter_svg.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../providers/user_provider.dart';
 import '../services/post_service.dart';
 import '../models/post_model.dart';
 import '../models/story_model.dart';
+import '../models/reel_model.dart';
 import '../services/story_service.dart';
+import '../services/reel_service.dart';
 import '../widgets/post_card.dart';
 import '../widgets/friend_suggestion_card.dart';
 import '../widgets/story_avatar.dart';
+import 'login_screen.dart';
 import 'add_post_screen.dart';
-import 'add_reel_screen.dart';
-import '../services/reel_service.dart';
-import '../models/reel_model.dart';
 import 'profile_screen.dart';
 import 'chatbot_screen.dart';
 import 'search_screen.dart';
-import 'inbox_screen.dart';  // new messaging inbox screen
+import 'inbox_screen.dart';
+import 'notifications_screen.dart';
+import 'reels_feed_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -32,157 +34,16 @@ class _HomeScreenState extends State<HomeScreen> {
   final PostService _postService = PostService();
   final StoryService _storyService = StoryService();
   int _currentIndex = 0;
-  bool _showNotifications = false;
   int _feedTab = 0; // 0 = For you, 1 = Following
   // Pagination state
-  final List<PostModel> _posts = [];
-  DocumentSnapshot? _lastDoc;
+  final List<dynamic> _feedItems = [];
+  DocumentSnapshot? _lastPostDoc;
+  DocumentSnapshot? _lastReelDoc;
   bool _isLoadingPosts = false;
   bool _hasMorePosts = true;
+  bool _hasMoreReels = true;
+  String? _feedError;
   final ScrollController _scrollController = ScrollController();
-
-  void _showNotificationPanel() {
-    setState(() {
-      _showNotifications = !_showNotifications;
-    });
-    
-    if (_showNotifications) {
-      showModalBottomSheet(
-        context: context,
-        backgroundColor: Color(0xFF1E1E1E),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-        ),
-        builder: (context) {
-          return Container(
-            padding: EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[700],
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                SizedBox(height: 16),
-                Row(
-                  children: [
-                    Icon(Icons.notifications, color: Colors.white),
-                    SizedBox(width: 8),
-                    Text(
-                      'Notifications',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 16),
-                Expanded(
-                  child: Builder(
-                    builder: (context) {
-                      final currentUser = Provider.of<UserProvider>(context, listen: false).user;
-                      if (currentUser == null) {
-                        return Center(
-                          child: Text('Sign in to see notifications', style: TextStyle(color: Colors.grey[400])),
-                        );
-                      }
-
-                      return StreamBuilder<QuerySnapshot>(
-                        stream: FirebaseFirestore.instance
-                            .collection('notifications')
-                            .where('userId', isEqualTo: currentUser.id)
-                            .orderBy('timestamp', descending: true)
-                            .snapshots(),
-                        builder: (context, snapshot) {
-                          if (!snapshot.hasData) {
-                            return Center(
-                              child: CircularProgressIndicator(
-                                color: Color(0xFF0095F6),
-                              ),
-                            );
-                          }
-
-                          final notifications = snapshot.data!.docs;
-                          if (notifications.isEmpty) {
-                            return Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.notifications_none,
-                                    size: 60,
-                                    color: Colors.grey[400],
-                                  ),
-                                  SizedBox(height: 16),
-                                  Text(
-                                    'No notifications yet',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      color: Colors.grey[600],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }
-
-                          return ListView.builder(
-                            itemCount: notifications.length,
-                            itemBuilder: (context, index) {
-                              final notif = notifications[index].data() as Map<String, dynamic>;
-                              return ListTile(
-                                tileColor: Color(0xFF1E1E1E),
-                                leading: CircleAvatar(
-                                  backgroundColor: Color(0xFF0095F6),
-                                  child: Icon(
-                                    notif['type'] == 'like'
-                                        ? Icons.favorite
-                                        : notif['type'] == 'comment'
-                                            ? Icons.chat_bubble
-                                            : Icons.person_add,
-                                    color: Colors.white,
-                                    size: 20,
-                                  ),
-                                ),
-                                title: Text(
-                                  notif['message'] ?? 'New notification',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                                subtitle: Text(
-                                  _formatTimestamp(
-                                    (notif['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
-                                  ),
-                                  style: TextStyle(color: Colors.grey[400]),
-                                ),
-                              );
-                            },
-                          );
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ).then((_) {
-        if (!mounted) return;
-        setState(() {
-          _showNotifications = false;
-        });
-      });
-    }
-  }
 
   Widget _buildProfileCompletionBanner({required String userId}) {
     return Container(
@@ -208,6 +69,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  int _feedTabIndex = 0;
+
   @override
   void initState() {
     super.initState();
@@ -227,56 +90,69 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadInitialPosts() async {
-    _posts.clear();
-    _lastDoc = null;
+    _feedItems.clear();
+    _lastPostDoc = null;
+    _lastReelDoc = null;
     _hasMorePosts = true;
+    _hasMoreReels = true;
+    _feedError = null;
     await _loadMorePosts();
   }
 
   Future<void> _loadMorePosts({int pageSize = 10}) async {
-    if (_isLoadingPosts || !_hasMorePosts) return;
-    setState(() => _isLoadingPosts = true);
+    if (_isLoadingPosts || (!_hasMorePosts && !_hasMoreReels)) return;
+    setState(() {
+      _isLoadingPosts = true;
+      _feedError = null;
+    });
     try {
       final currentUser = Provider.of<UserProvider>(context, listen: false).user;
-      QuerySnapshot snap;
-      if (_feedTab == 1) {
-        snap = await _postService.fetchFollowingPostsPageSnapshot(currentUser?.id ?? '', startAfter: _lastDoc, pageSize: pageSize);
-      } else {
-        snap = await _postService.fetchPostsPageSnapshot(startAfter: _lastDoc, pageSize: pageSize);
-      }
-      if (snap.docs.isNotEmpty) {
-        if (!mounted) return;
-        final newPosts = snap.docs.map((d) => PostModel.fromMap(d.data() as Map<String, dynamic>, d.id)).toList();
-        setState(() {
-          _posts.addAll(newPosts);
-          _lastDoc = snap.docs.last;
-          if (snap.docs.length < pageSize) _hasMorePosts = false;
-        });
-      } else {
-        if (!mounted) return;
-        setState(() {
+      List<dynamic> newBatch = [];
+
+      if (_hasMorePosts) {
+        QuerySnapshot postSnap;
+        if (_feedTab == 1) {
+          postSnap = await _postService.fetchFollowingPostsPageSnapshot(currentUser?.id ?? '', startAfter: _lastPostDoc, pageSize: pageSize);
+        } else {
+          postSnap = await _postService.fetchPostsPageSnapshot(startAfter: _lastPostDoc, pageSize: pageSize);
+        }
+        if (postSnap.docs.isNotEmpty) {
+          final newPosts = postSnap.docs.map((d) => PostModel.fromMap(d.data() as Map<String, dynamic>, d.id)).toList();
+          _lastPostDoc = postSnap.docs.last;
+          if (postSnap.docs.length < pageSize) _hasMorePosts = false;
+          newBatch.addAll(newPosts);
+        } else {
           _hasMorePosts = false;
+        }
+      }
+
+      if (_hasMoreReels && _feedTab == 0) {
+        final reelSnap = await ReelService().fetchReelsPageSnapshot(startAfter: _lastReelDoc, pageSize: 2);
+        if (reelSnap.docs.isNotEmpty) {
+          final newReels = reelSnap.docs.map((doc) => ReelModel.fromMap(doc.data() as Map<String, dynamic>, doc.id)).toList();
+          _lastReelDoc = reelSnap.docs.last;
+          if (reelSnap.docs.length < 2) _hasMoreReels = false;
+          if (newReels.isNotEmpty) {
+            int insertIndex = newBatch.length > 2 ? 2 : newBatch.length;
+            newBatch.insertAll(insertIndex, newReels);
+          }
+        } else {
+          _hasMoreReels = false;
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _feedItems.addAll(newBatch);
         });
       }
     } catch (e) {
-      // ignore load errors for now
+      if (mounted) {
+        setState(() => _feedError = e.toString());
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to load feed: $e')));
+      }
     } finally {
       if (mounted) setState(() => _isLoadingPosts = false);
-    }
-  }
-
-  String _formatTimestamp(DateTime timestamp) {
-    final now = DateTime.now();
-    final difference = now.difference(timestamp);
-    
-    if (difference.inDays > 0) {
-      return '${difference.inDays}d ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m ago';
-    } else {
-      return 'Just now';
     }
   }
 
@@ -286,22 +162,8 @@ class _HomeScreenState extends State<HomeScreen> {
     // if there's no signed-in user, avoid creating a doc(null) stream
     if (currentUser == null) {
       return Container(
-        height: 100,
-        color: Color(0xFF121212),
-        child: Center(
-          child: Text(
-            'Sign in to see stories',
-            style: TextStyle(color: Colors.grey[500]),
-          ),
-        ),
-      );
-    }
-
-    // if there's no signed-in user, avoid creating a doc(null) stream
-    if (currentUser == null) {
-      return Container(
-        height: 100,
-        color: Color(0xFF121212),
+        height: 120, // Increased to fix bottom overflow inside ListView horizontally children
+        color: Theme.of(context).scaffoldBackgroundColor,
         child: Center(
           child: Text(
             'Sign in to see stories',
@@ -314,13 +176,13 @@ class _HomeScreenState extends State<HomeScreen> {
     // first stream returns the IDs of people we follow (including self)
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
-          .collection('users')
+          .collection('followers')
           .doc(currentUser.id)
           .collection('following')
           .snapshots(),
       builder: (context, followingSnapshot) {
         final followingIds = <String>[];
-        if (currentUser != null) followingIds.add(currentUser.id);
+        followingIds.add(currentUser.id);
         if (followingSnapshot.hasData) {
           followingIds.addAll(followingSnapshot.data!.docs.map((d) => d.id));
         }
@@ -328,28 +190,30 @@ class _HomeScreenState extends State<HomeScreen> {
         return StreamBuilder<List<StoryModel>>(
           stream: _storyService.fetchStories(followingIds),
           builder: (context, storySnapshot) {
-            final hasStorySet = <String>{};
+            final Map<String, StoryModel> latestStoryMap = {};
             if (storySnapshot.hasData) {
               for (var s in storySnapshot.data!) {
                 if (DateTime.now().difference(s.timestamp).inHours < 24) {
-                  hasStorySet.add(s.userId);
+                  if (!latestStoryMap.containsKey(s.userId)) {
+                    latestStoryMap[s.userId] = s;
+                  }
                 }
               }
             }
 
             return Container(
-              height: 110,
-              color: Color(0xFF121212),
+              height: 120, // Increased to fix bottom overflow
+              color: Theme.of(context).scaffoldBackgroundColor,
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
-                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 itemCount: followingIds.length,
                 itemBuilder: (context, index) {
                   final uid = followingIds[index];
                   String profilePic = '';
                   String username = 'User';
                   bool isCurrentUser = currentUser != null && uid == currentUser.id;
-                  bool hasStory = hasStorySet.contains(uid);
+                  bool hasStory = latestStoryMap.containsKey(uid);
 
                   if (isCurrentUser) {
                     profilePic = currentUser?.profilePic ?? '';
@@ -369,7 +233,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     onTap: isCurrentUser
                         ? _addStory
                         : hasStory
-                            ? () => _viewStory(uid, username, profilePic)
+                            ? () => _viewStory(uid, username, profilePic, latestStoryMap[uid]!.imageUrl)
                             : null,
                   );
                 },
@@ -381,93 +245,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildStoryItem(String profilePic, String username, String userId, {required bool isCurrentUser, required bool hasStory}) {
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 8),
-      child: GestureDetector(
-        onTap: isCurrentUser 
-            ? _addStory 
-            : hasStory 
-                ? () => _viewStory(userId, username, profilePic)
-                : null,
-        child: Column(
-          children: [
-            Stack(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(2),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: hasStory 
-                      ? LinearGradient(
-                          colors: [Color(0xFF833AB4), Color(0xFFE1306C), Color(0xFFF56040)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        )
-                      : null,
-                    border: !hasStory && !isCurrentUser 
-                      ? Border.all(color: Colors.grey[700]!, width: 1)
-                      : null,
-                  ),
-                  child: CircleAvatar(
-                    radius: 32,
-                    backgroundColor: Colors.grey[800],
-                    backgroundImage: profilePic.isNotEmpty 
-                      ? NetworkImage(profilePic) 
-                      : null,
-                    child: profilePic.isEmpty
-                      ? Text(
-                          username.isNotEmpty ? username[0].toUpperCase() : '?',
-                          style: TextStyle(
-                            fontSize: 24,
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        )
-                      : null,
-                  ),
-                ),
-                if (isCurrentUser)
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
-                    child: Container(
-                      padding: EdgeInsets.all(2),
-                      decoration: BoxDecoration(
-                        color: Color(0xFF0095F6),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
-                      ),
-                      child: Icon(
-                        Icons.add,
-                        color: Colors.white,
-                        size: 14,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            SizedBox(height: 4),
-            SizedBox(
-              width: 70,
-              child: Text(
-                isCurrentUser ? 'Your Story' : username,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.white,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
-  void _viewStory(String userId, String username, String profilePic) {
+
+  void _viewStory(String userId, String username, String profilePic, String storyImageUrl) {
     // Show story in a full screen dialog
     showDialog(
       context: context,
@@ -478,9 +258,9 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             // Story image (using cached network image placeholder for now)
             Center(
-              child: profilePic.isNotEmpty
+              child: storyImageUrl.isNotEmpty
                   ? Image.network(
-                      profilePic,
+                      storyImageUrl,
                       fit: BoxFit.cover,
                       width: double.infinity,
                       height: double.infinity,
@@ -555,38 +335,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildTabSwitcher() {
-    return Container(
-      padding: EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          GestureDetector(
-            onTap: () async { setState(() => _feedTab = 0); await _loadInitialPosts(); },
-            child: Column(
-              children: [
-                Text('For you', style: TextStyle(color: _feedTab == 0 ? Colors.white : Colors.grey)),
-                SizedBox(height: 4),
-                Container(height: 2, width: 50, color: _feedTab == 0 ? Colors.white : Colors.transparent),
-              ],
-            ),
-          ),
-          SizedBox(width: 32),
-          GestureDetector(
-            onTap: () async { setState(() => _feedTab = 1); await _loadInitialPosts(); },
-            child: Column(
-              children: [
-                Text('Following', style: TextStyle(color: _feedTab == 1 ? Colors.white : Colors.grey)),
-                SizedBox(height: 4),
-                Container(height: 2, width: 70, color: _feedTab == 1 ? Colors.white : Colors.transparent),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _addStory() {
     Navigator.push(
       context,
@@ -600,9 +348,15 @@ class _HomeScreenState extends State<HomeScreen> {
       case 0:
         return Column(
           children: [
+            Container(
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor, width: 0.5)),
+                color: Theme.of(context).scaffoldBackgroundColor,
+              ),
+              child: _buildStories(),
+            ),
             if (user != null && (user.username.isEmpty || user.profilePic.isEmpty))
               _buildProfileCompletionBanner(userId: user.id),
-            _buildTabSwitcher(),
             // FOR YOU: show suggestions and all posts
             if (_feedTab == 0)
               Column(
@@ -612,7 +366,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     height: 140,
                     child: StreamBuilder<QuerySnapshot>(
                       stream: FirebaseFirestore.instance
-                          .collection('users')
+                          .collection('followers')
                           .doc(user?.id)
                           .collection('following')
                           .snapshots(),
@@ -670,20 +424,87 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
 
-                  // Posts feed below suggestions
-                  SizedBox(height: 8),
+                  // Feed Tabs
+                  Container(
+                    decoration: BoxDecoration(
+                      border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor, width: 0.5)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setState(() => _feedTabIndex = 0),
+                            child: Container(
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              decoration: BoxDecoration(
+                                border: Border(
+                                  bottom: BorderSide(
+                                    color: _feedTabIndex == 0 ? Theme.of(context).iconTheme.color! : Colors.transparent,
+                                    width: 1.5,
+                                  ),
+                                ),
+                              ),
+                              child: Center(
+                                child: Text('For you', style: TextStyle(
+                                  fontWeight: _feedTabIndex == 0 ? FontWeight.bold : FontWeight.normal,
+                                  color: _feedTabIndex == 0 ? Theme.of(context).iconTheme.color : Colors.grey,
+                                )),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setState(() => _feedTabIndex = 1),
+                            child: Container(
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              decoration: BoxDecoration(
+                                border: Border(
+                                  bottom: BorderSide(
+                                    color: _feedTabIndex == 1 ? Theme.of(context).iconTheme.color! : Colors.transparent,
+                                    width: 1.5,
+                                  ),
+                                ),
+                              ),
+                              child: Center(
+                                child: Text('Following', style: TextStyle(
+                                  fontWeight: _feedTabIndex == 1 ? FontWeight.bold : FontWeight.normal,
+                                  color: _feedTabIndex == 1 ? Theme.of(context).iconTheme.color : Colors.grey,
+                                )),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Posts feed below tabs
+                  // SizedBox(height: 8),
                 ],
               ),
 
             // Feed area (paginated)
             Expanded(
-              child: RefreshIndicator(
+              child: _feedTabIndex == 1 
+                ? _buildFollowingUsersList(user?.id ?? '')
+                : RefreshIndicator(
                 onRefresh: () async {
                   await _loadInitialPosts();
                 },
-                child: _posts.isEmpty && _isLoadingPosts
+                child: _feedError != null
+                    ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        Icon(Icons.error_outline, size: 60, color: Colors.red[400]),
+                        SizedBox(height: 16),
+                        Text('Error loading feed', style: TextStyle(fontSize: 16, color: Colors.grey[600])),
+                        Text(_feedError!, textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: Colors.grey[500])),
+                        SizedBox(height: 16),
+                        ElevatedButton(onPressed: _loadInitialPosts, child: Text('Retry')),
+                      ]))
+                    : _feedItems.isEmpty && _isLoadingPosts
                     ? Center(child: CircularProgressIndicator(color: Color(0xFF0095F6)))
-                    : _posts.isEmpty
+                    : _feedItems.isEmpty
                         ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                             Icon(FontAwesomeIcons.photoFilm, size: 60, color: Colors.grey[600]),
                             SizedBox(height: 16),
@@ -693,17 +514,17 @@ class _HomeScreenState extends State<HomeScreen> {
                           ]))
                         : ListView.builder(
                             controller: _scrollController,
-                            itemCount: _posts.length + (_hasMorePosts ? 1 : 0),
+                            itemCount: _feedItems.length + ((_hasMorePosts || _hasMoreReels) ? 1 : 0),
                             itemBuilder: (context, index) {
-                              if (index >= _posts.length) {
+                              if (index >= _feedItems.length) {
                                 // loading indicator
                                 return Padding(
                                   padding: const EdgeInsets.symmetric(vertical: 16),
                                   child: Center(child: CircularProgressIndicator(color: Color(0xFF0095F6))),
                                 );
                               }
-                              final post = _posts[index];
-                              return PostCard(post: post, currentUser: user!);
+                              final item = _feedItems[index];
+                              return PostCard(post: item, currentUser: user!);
                             },
                           ),
               ),
@@ -711,53 +532,11 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         );
       case 1:
-        // Reels feed
-        return StreamBuilder<List<ReelModel>>(
-          stream: ReelService().fetchReels(),
-          builder: (context, snapshot) {
-            if (!snapshot.hasData) {
-              return Center(child: CircularProgressIndicator(color: Color(0xFF0095F6)));
-            }
-            final reels = snapshot.data!;
-            if (reels.isEmpty) {
-              return Center(child: Text('No reels yet', style: TextStyle(color: Colors.grey[500])));
-            }
-            return ListView.builder(
-              itemCount: reels.length,
-              itemBuilder: (context, index) {
-                final r = reels[index];
-                return ListTile(
-                  tileColor: Color(0xFF1E1E1E),
-                  leading: Container(
-                    width: 64,
-                    height: 64,
-                    color: Colors.grey[800],
-                    child: Center(child: Icon(Icons.play_arrow, color: Colors.white)),
-                  ),
-                  title: Text(r.username, style: TextStyle(color: Colors.white)),
-                  subtitle: Text(r.caption, style: TextStyle(color: Colors.grey[400])),
-                  onTap: () {
-                    showDialog(
-                      context: context,
-                      builder: (_) => AlertDialog(
-                        backgroundColor: Color(0xFF121212),
-                        title: Text('Reel', style: TextStyle(color: Colors.white)),
-                        content: Text('Video URL:\n${r.videoUrl}', style: TextStyle(color: Colors.white70)),
-                        actions: [
-                          TextButton(onPressed: () => Navigator.pop(context), child: Text('Close')),
-                        ],
-                      ),
-                    );
-                  },
-                );
-              },
-            );
-          },
-        );
-      case 2:
-        return Container();
-      case 3:
         return SearchScreen();
+      case 2:
+        return Container(); // Intercepted tap
+      case 3:
+        return ReelsFeedScreen();
       case 4:
         return ProfileScreen();
       default:
@@ -767,81 +546,113 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (FirebaseAuth.instance.currentUser == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => LoginScreen()));
+      });
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    final currentUser = Provider.of<UserProvider>(context).user;
+    if (currentUser == null) {
+      return Scaffold(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
-      backgroundColor: Color(0xFF121212),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        leading: IconButton(
-          icon: FaIcon(FontAwesomeIcons.solidCommentDots, size: 24),
-          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => InboxScreen())),
+        title: Text(
+          'RebelGram',
+          style: TextStyle(
+            fontFamily: 'Billabong',
+            fontSize: 28,
+            fontWeight: FontWeight.normal,
+            color: Theme.of(context).textTheme.titleLarge?.color,
+          ),
         ),
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SvgPicture.asset(
-              'assets/images/rebelgram-icon.svg',
-              width: 28,
-              height: 28,
-            ),
-            SizedBox(width: 8),
-            Text(
-              'RebelGram',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.2,
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: Color(0xFF121212),
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
         elevation: 0,
         actions: [
-          IconButton(
-            icon: FaIcon(
-              FontAwesomeIcons.robot,
-              color: Colors.white,
-            ),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ChatbotScreen())),
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('notifications')
+                .where('userId', isEqualTo: currentUser.id)
+                .where('isRead', isEqualTo: false)
+                .snapshots(),
+            builder: (context, snapshot) {
+              int unreadCount = 0;
+              if (snapshot.hasData && !snapshot.hasError) {
+                unreadCount = snapshot.data!.docs.length;
+              }
+              return IconButton(
+                icon: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Icon(Icons.favorite_border, color: Theme.of(context).iconTheme.color),
+                    if (unreadCount > 0)
+                      Positioned(
+                        right: -4,
+                        top: -4,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(
+                            unreadCount > 9 ? '9+' : unreadCount.toString(),
+                            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                onPressed: () {
+                  // Mark as read in background without blocking
+                  if (unreadCount > 0 && snapshot.hasData) {
+                    final batch = FirebaseFirestore.instance.batch();
+                    int count = 0;
+                    for (var doc in snapshot.data!.docs) {
+                      if (count++ >= 500) break; // Limit batch size just in case
+                      batch.update(doc.reference, {'isRead': true});
+                    }
+                    batch.commit().catchError((_) => null);
+                  }
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen()));
+                },
+              );
+            },
           ),
           IconButton(
-            icon: FaIcon(
-              FontAwesomeIcons.bell,
-              color: Colors.white,
-            ),
-            onPressed: _showNotificationPanel,
+            icon: Icon(Icons.send_outlined, color: Theme.of(context).iconTheme.color),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => InboxScreen())),
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              color: Color(0xFF121212),
-              border: Border(
-                bottom: BorderSide(color: Color(0xFF2C2C2C), width: 0.5),
-              ),
-            ),
-            child: _buildStories(),
-          ),
-          Expanded(
-            child: _buildBody(),
-          ),
-        ],
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 8.0, right: 4.0),
+        child: FloatingActionButton(
+          heroTag: 'chatbotFab', // Avoid conflicts
+          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ChatbotScreen())),
+          backgroundColor: Color(0xFF0095F6),
+          foregroundColor: Colors.white,
+          elevation: 4,
+          shape: CircleBorder(),
+          child: FaIcon(FontAwesomeIcons.robot, size: 22),
+        ),
       ),
-      floatingActionButton: _currentIndex == 1
-          ? FloatingActionButton(
-              backgroundColor: Color(0xFF0095F6),
-              child: Icon(Icons.add),
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AddReelScreen())),
-            )
-          : null,
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+      body: _buildBody(),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          color: Color(0xFF121212),
+          color: Theme.of(context).scaffoldBackgroundColor,
           border: Border(
             top: BorderSide(
-              color: Color(0xFF2C2C2C),
+              color: Theme.of(context).dividerColor,
               width: 0.5,
             ),
           ),
@@ -851,6 +662,10 @@ class _HomeScreenState extends State<HomeScreen> {
           type: BottomNavigationBarType.fixed,
           backgroundColor: Colors.transparent,
           elevation: 0,
+          showSelectedLabels: false,
+          showUnselectedLabels: false,
+          selectedItemColor: Theme.of(context).iconTheme.color,
+          unselectedItemColor: Theme.of(context).iconTheme.color,
           onTap: (index) {
             if (index == 2) {
               Navigator.push(context, MaterialPageRoute(builder: (_) => AddPostScreen()));
@@ -862,39 +677,113 @@ class _HomeScreenState extends State<HomeScreen> {
           },
           items: [
             BottomNavigationBarItem(
-              icon: FaIcon(FontAwesomeIcons.house, size: 24),
+              icon: Icon(Icons.home_outlined, size: 28),
+              activeIcon: Icon(Icons.home, size: 28),
               label: '',
             ),
             BottomNavigationBarItem(
-              icon: FaIcon(FontAwesomeIcons.play, size: 24),
+              icon: Icon(Icons.search, size: 28),
+              activeIcon: Icon(Icons.search, size: 28, weight: 900),
               label: '',
             ),
             BottomNavigationBarItem(
-              icon: Container(
-                padding: EdgeInsets.all(2),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Color(0xFF833AB4), Color(0xFFE1306C), Color(0xFFF56040)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: FaIcon(FontAwesomeIcons.plus, color: Colors.white, size: 18),
+              icon: Icon(Icons.add_box_outlined, size: 28),
+              label: '',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.video_collection_outlined, size: 28),
+              activeIcon: Icon(Icons.video_collection, size: 28),
+              label: '',
+            ),
+            BottomNavigationBarItem(
+              icon: Consumer<UserProvider>(
+                builder: (context, userProvider, child) {
+                  final user = userProvider.user;
+                  return CircleAvatar(
+                    radius: 14,
+                    backgroundImage: user?.profilePic != null && user!.profilePic.isNotEmpty
+                        ? NetworkImage(user.profilePic)
+                        : null,
+                    backgroundColor: Colors.grey.shade300,
+                    child: user?.profilePic == null || user!.profilePic.isEmpty
+                        ? Text(
+                            user?.username.isNotEmpty == true ? user!.username[0].toUpperCase() : '?',
+                            style: TextStyle(fontSize: 12, color: Colors.black87),
+                          )
+                        : null,
+                  );
+                },
               ),
-              label: '',
-            ),
-            BottomNavigationBarItem(
-              icon: FaIcon(FontAwesomeIcons.magnifyingGlass, size: 24),
-              label: '',
-            ),
-            BottomNavigationBarItem(
-              icon: FaIcon(FontAwesomeIcons.user, size: 24),
               label: '',
             ),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildFollowingUsersList(String currentUserId) {
+    if (currentUserId.isEmpty) return SizedBox.shrink();
+    
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('followers').doc(currentUserId).collection('following').snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: Color(0xFF0095F6)));
+        
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.people_outline, size: 60, color: Colors.grey),
+                SizedBox(height: 16),
+                Text("Start following people to see them here", style: TextStyle(color: Colors.grey, fontSize: 16)),
+              ],
+            ),
+          );
+        }
+
+        final following = snapshot.data!.docs;
+        return ListView.builder(
+          itemCount: following.length,
+          itemBuilder: (context, index) {
+            final data = following[index].data() as Map<String, dynamic>;
+            final targetId = data['userId'] ?? following[index].id;
+            final username = data['username'] ?? 'User';
+            final profilePic = data['profilePic'] ?? '';
+            final name = data['name'] ?? ''; // Added to match Instagram
+
+            return ListTile(
+              leading: CircleAvatar(
+                backgroundColor: Colors.grey[800],
+                backgroundImage: profilePic.isNotEmpty ? NetworkImage(profilePic) : null,
+                child: profilePic.isEmpty ? Icon(Icons.person, color: Colors.white) : null,
+              ),
+              title: Text(username, style: TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: name.isNotEmpty ? Text(name, style: TextStyle(color: Colors.grey)) : null,
+              trailing: OutlinedButton(
+                onPressed: () => _unfollowUser(targetId, currentUserId),
+                style: OutlinedButton.styleFrom(
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  side: BorderSide(color: Color(0xFFDBDBDB)),
+                  minimumSize: Size(90, 36),
+                ),
+                child: Text('Following', style: TextStyle(fontSize: 13, color: Theme.of(context).textTheme.bodyMedium?.color)),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _unfollowUser(String targetUserId, String currentUserId) async {
+    try {
+      await FirebaseFirestore.instance.collection('followers').doc(currentUserId).collection('following').doc(targetUserId).delete();
+      await FirebaseFirestore.instance.collection('followers').doc(targetUserId).collection('followers').doc(currentUserId).delete();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Unfollowed user')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to unfollow: $e')));
+    }
   }
 }

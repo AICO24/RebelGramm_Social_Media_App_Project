@@ -158,6 +158,9 @@ class _AddReelScreenState extends State<AddReelScreen> {
         username: user.username,
         caption: captionController.text,
         videoUrl: videoUrl,
+        musicArtist: user.username,
+        musicTitle: 'Original Audio',
+        duration: '0:${AppCloudinaryConfig.maxVideoDurationSeconds}',
         timestamp: DateTime.now(),
         likes: [],
       );

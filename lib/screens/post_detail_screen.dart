@@ -3,12 +3,11 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:uuid/uuid.dart';
 import 'package:provider/provider.dart';
-import '../models/post_model.dart';
 import '../models/comment_model.dart';
 import '../providers/user_provider.dart';
 
 class PostDetailScreen extends StatefulWidget {
-  final PostModel post;
+  final dynamic post;
   final VoidCallback? onCommentAdded;
 
   const PostDetailScreen({Key? key, required this.post, this.onCommentAdded}) : super(key: key);
@@ -99,19 +98,36 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               stream: FirebaseFirestore.instance
                   .collection('comments')
                   .where('postId', isEqualTo: widget.post.id)
-                  .orderBy('timestamp', descending: true)
+                  // Removed .orderBy() so that a complex Composite Index isn't required!
                   .snapshots(),
               builder: (context, snapshot) {
-                if (!snapshot.hasData) {
+                if (snapshot.hasError) {
                   return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Text(
+                        'Failed to load comments.\n${snapshot.error}',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                    ),
+                  );
+                }
+                if (!snapshot.hasData) {
+                  return const Center(
                     child: CircularProgressIndicator(
                       color: Color(0xFF0095F6),
                     ),
                   );
                 }
+                
                 final comments = snapshot.data!.docs
                     .map((doc) => CommentModel.fromMap(doc.data() as Map<String, dynamic>, doc.id))
                     .toList();
+                
+                // Sort descending (newest first) locally in memory!
+                comments.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+                
                 if (comments.isEmpty) {
                   return Center(
                     child: Column(
@@ -196,26 +212,28 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             ),
           ),
 
-          // Post image shown below the comments
-          CachedNetworkImage(
-            imageUrl: widget.post.imageUrl,
-            placeholder: (context, url) => Container(
-              height: 250,
-              color: Colors.grey[900],
-              child: Center(
-                child: CircularProgressIndicator(
-                  color: Color(0xFF0095F6),
+          // Post image shown below the comments (only for image posts)
+          if (widget.post.runtimeType.toString() != 'ReelModel')
+            CachedNetworkImage(
+              imageUrl: widget.post.imageUrl,
+              placeholder: (context, url) => Container(
+                height: 150,
+                color: Colors.grey[900],
+                child: const Center(
+                  child: CircularProgressIndicator(
+                    color: Color(0xFF0095F6),
+                  ),
                 ),
               ),
+              errorWidget: (context, url, error) => Container(
+                height: 150,
+                color: Colors.grey[900],
+                child: Center(child: Icon(Icons.broken_image, size: 50, color: Colors.grey[600])),
+              ),
+              width: double.infinity,
+              height: 150,
+              fit: BoxFit.cover,
             ),
-            errorWidget: (context, url, error) => Container(
-              height: 250,
-              color: Colors.grey[900],
-              child: Center(child: Icon(Icons.broken_image, size: 50, color: Colors.grey[600])),
-            ),
-            width: double.infinity,
-            fit: BoxFit.cover,
-          ),
 
           // Comment input
           Container(
