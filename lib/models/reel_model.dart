@@ -11,6 +11,7 @@ class ReelModel {
   final String duration;
   final DateTime timestamp;
   final List<String> likes;
+  final int shareCount;
 
   ReelModel({
     required this.id,
@@ -23,6 +24,7 @@ class ReelModel {
     this.duration = '0:15',
     required this.timestamp,
     required this.likes,
+    this.shareCount = 0,
   });
 
   Map<String, dynamic> toMap() {
@@ -36,6 +38,7 @@ class ReelModel {
       'duration': duration,
       'timestamp': timestamp,
       'likes': likes,
+      'shareCount': shareCount,
     };
   }
 
@@ -63,6 +66,7 @@ class ReelModel {
       duration: map['duration'] ?? '0:15',
       timestamp: ts,
       likes: List<String>.from(map['likes'] ?? []),
+      shareCount: map['shareCount'] ?? 0,
     );
   }
 }

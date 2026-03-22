@@ -1,3 +1,9 @@
+// ==========================================
+// ROLE: Member 4 - Reels & Video Architecture
+// ==========================================
+// Handles reading and writing Video posts to the 'reels' collection in Firestore.
+// Similar to PostService, but adapted exclusively for the requirements of vertical video feeds.
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/reel_model.dart';
 import 'package:uuid/uuid.dart';
@@ -40,5 +46,40 @@ class ReelService {
     }
     
     await docRef.update({'likes': likes});
+  }
+
+  Future<void> toggleShareStatus(String reelId, String userId) async {
+    final docRef = _db.collection('reels').doc(reelId);
+    final shareRef = docRef.collection('shares').doc(userId);
+
+    await _db.runTransaction((tx) async {
+      final reelSnap = await tx.get(docRef);
+      if (!reelSnap.exists) return;
+      final shareSnap = await tx.get(shareRef);
+
+      if (shareSnap.exists) {
+        tx.delete(shareRef);
+        tx.update(docRef, {'shareCount': FieldValue.increment(-1)});
+      } else {
+        tx.set(shareRef, {'createdAt': FieldValue.serverTimestamp()});
+        tx.update(docRef, {'shareCount': FieldValue.increment(1)});
+      }
+    });
+  }
+
+  Future<bool> isReelShared(String reelId, String userId) async {
+    final doc = await _db.collection('reels').doc(reelId).collection('shares').doc(userId).get();
+    return doc.exists;
+  }
+
+  Future<void> shareReel(String reelId, String fromUserId, String toUserId) async {
+    await _db.collection('notifications').add({
+      'userId': toUserId,
+      'type': 'share',
+      'message': 'sent you a reel',
+      'fromUserId': fromUserId,
+      'postId': reelId,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
   }
 }

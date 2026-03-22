@@ -1,3 +1,13 @@
+// ==========================================
+// ROLE: Member 3 - Content Creation & Interactions
+// ==========================================
+// This Backend Service orchestrates all communication directly with the Firestore 'posts' collection.
+// It uses atomic Transactions to ensure counters (like likes or shares) never desync.
+// Key functions:
+// - uploadPost(): Saves media URLs and texts.
+// - likePost(), toggleRepost(), toggleShareStatus(): Modifies arrays and counts securely.
+// - addComment(): Injects comments into the subcollections.
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/post_model.dart';
 import 'package:uuid/uuid.dart';
@@ -151,6 +161,54 @@ class PostService {
   /// Check whether a user has liked a given post (reads the likes subcollection).
   Future<bool> isPostLiked(String postId, String userId) async {
     final doc = await _db.collection('posts').doc(postId).collection('likes').doc(userId).get();
+    return doc.exists;
+  }
+
+  Future<void> toggleRepost(String postId, String userId) async {
+    final postRef = _db.collection('posts').doc(postId);
+    final repostRef = postRef.collection('reposts').doc(userId);
+
+    await _db.runTransaction((tx) async {
+      final postSnap = await tx.get(postRef);
+      if (!postSnap.exists) return;
+      final repostSnap = await tx.get(repostRef);
+
+      if (repostSnap.exists) {
+        tx.delete(repostRef);
+        tx.update(postRef, {'repostCount': FieldValue.increment(-1)});
+      } else {
+        tx.set(repostRef, {'createdAt': FieldValue.serverTimestamp()});
+        tx.update(postRef, {'repostCount': FieldValue.increment(1)});
+      }
+    });
+  }
+
+  Future<bool> isPostReposted(String postId, String userId) async {
+    final doc = await _db.collection('posts').doc(postId).collection('reposts').doc(userId).get();
+    return doc.exists;
+  }
+
+  Future<void> toggleShareStatus(String postId, String userId) async {
+    final postRef = _db.collection('posts').doc(postId);
+    final shareRef = postRef.collection('shares').doc(userId);
+
+    await _db.runTransaction((tx) async {
+      final postSnap = await tx.get(postRef);
+      if (!postSnap.exists) return;
+      final shareSnap = await tx.get(shareRef);
+
+      if (shareSnap.exists) {
+        tx.delete(shareRef);
+        tx.update(postRef, {'shareCount': FieldValue.increment(-1)});
+      } else {
+        tx.set(shareRef, {'createdAt': FieldValue.serverTimestamp()});
+        tx.update(postRef, {'shareCount': FieldValue.increment(1)});
+      }
+    });
+  }
+
+  Future<bool> isPostShared(String postId, String userId) async {
+    final doc = await _db.collection('posts').doc(postId).collection('shares').doc(userId).get();
     return doc.exists;
   }
 

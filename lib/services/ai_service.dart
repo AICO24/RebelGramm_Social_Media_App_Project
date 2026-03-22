@@ -1,3 +1,9 @@
+// ==========================================
+// ROLE: Member 6 - Artificial Intelligence & Notifications
+// ==========================================
+// Connects the Flutter frontend to the external Generative AI endpoint.
+// Generates the system payload formatting and processes the JSON responses.
+
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 

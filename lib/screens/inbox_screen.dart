@@ -1,3 +1,10 @@
+// ==========================================
+// ROLE: Member 5 - Real-time Messaging
+// ==========================================
+// The Inbox handles individual private chats between followers.
+// It leverages real-time Snapshots to instantly render new incoming messages without needing
+// to pull-to-refresh. Features the New Message UI to filter connections and spawn ChatScreens.
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -228,7 +235,7 @@ class _NewMessageSheet extends StatefulWidget {
 
 class _NewMessageSheetState extends State<_NewMessageSheet> {
   String _searchQuery = '';
-  List<DocumentSnapshot> _followers = [];
+  List<Map<String, dynamic>> _followersData = [];
   bool _loading = true;
 
   @override
@@ -244,9 +251,21 @@ class _NewMessageSheetState extends State<_NewMessageSheet> {
         .collection('following')
         .get();
 
+    List<Map<String, dynamic>> loadedData = [];
+    for (var doc in snapshot.docs) {
+      try {
+        final userDoc = await FirebaseFirestore.instance.collection('users').doc(doc.id).get();
+        if (userDoc.exists) {
+            final data = userDoc.data()!;
+            data['id'] = userDoc.id; // Store ID for chat navigation
+            loadedData.add(data);
+        }
+      } catch (_) {}
+    }
+
     if (!mounted) return;
     setState(() {
-      _followers = snapshot.docs;
+      _followersData = loadedData;
       _loading = false;
     });
   }
@@ -314,9 +333,9 @@ class _NewMessageSheetState extends State<_NewMessageSheet> {
             child: _loading
                 ? Center(child: CircularProgressIndicator(color: Color(0xFF0095F6)))
                 : ListView.builder(
-                    itemCount: _followers.length,
+                    itemCount: _followersData.length,
                     itemBuilder: (context, index) {
-                      final data = _followers[index].data() as Map<String, dynamic>;
+                      final data = _followersData[index];
                       final username = data['username'] ?? 'User';
                       final profilePic = data['profilePic'] ?? '';
                       
@@ -332,7 +351,7 @@ class _NewMessageSheetState extends State<_NewMessageSheet> {
                               : null,
                           backgroundColor: Colors.grey[800],
                           child: profilePic.isEmpty
-                              ? Text(username[0].toUpperCase(), 
+                              ? Text(username.isNotEmpty ? username[0].toUpperCase() : '?', 
                                   style: TextStyle(color: Colors.white))
                               : null,
                         ),
@@ -344,7 +363,7 @@ class _NewMessageSheetState extends State<_NewMessageSheet> {
                             MaterialPageRoute(
                               builder: (_) => ChatScreen(
                                 currentUserId: widget.currentUserId,
-                                otherUserId: _followers[index].id,
+                                otherUserId: data['id'],
                               ),
                             ),
                           );

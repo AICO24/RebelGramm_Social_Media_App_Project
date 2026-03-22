@@ -1,3 +1,13 @@
+// ==========================================
+// ROLE: Member 3 - Content Creation & Interactions
+// ==========================================
+// The most complex UI component in the app. This renders individual posts on the feed.
+// Responsibilities:
+// - Parsing data from PostModel into visual fields (Image, Caption, Username).
+// - Displaying dynamic interaction counters for Likes, Comments, Reposts, and Shares.
+// - Handling interactive UI states locally before sending transaction requests to Firestore.
+// - Managing the 'Save' and 'Follow' quick-actions directly on the card.
+
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -29,6 +39,10 @@ class _PostCardState extends State<PostCard> {
   String? _displayName;
   String? _profilePic;
   int _commentCount = 0;
+  bool _isReposted = false;
+  int _repostCount = 0;
+  bool _isShared = false;
+  int _shareCount = 0;
   VideoPlayerController? _videoController;
 
   bool get isReel => widget.post is ReelModel;
@@ -42,6 +56,8 @@ class _PostCardState extends State<PostCard> {
     
     _isLiked = widget.post.likes?.contains(widget.currentUser?.id) ?? false;
     _likeCount = isReel ? (widget.post.likes?.length ?? 0) : widget.post.likeCount;
+    _repostCount = isReel ? 0 : (widget.post.repostCount ?? 0);
+    _shareCount = isReel ? 0 : (widget.post.shareCount ?? 0);
 
     if (isReel) {
       _videoController = VideoPlayerController.networkUrl(Uri.parse(widget.post.videoUrl))
@@ -57,6 +73,8 @@ class _PostCardState extends State<PostCard> {
       _checkSaved();
       _checkIsLiked();
       _loadCommentCount();
+      _checkIsReposted();
+      _checkIsShared();
     }
     _checkFollowing();
   }
@@ -78,6 +96,72 @@ class _PostCardState extends State<PostCard> {
       });
     } catch (_) {
       // ignore
+    }
+  }
+
+  Future<void> _checkIsReposted() async {
+    if (widget.currentUser == null) return;
+    try {
+      final reposted = await _postService.isPostReposted(widget.post.id, widget.currentUser.id);
+      if (!mounted) return;
+      setState(() => _isReposted = reposted);
+    } catch (_) {}
+  }
+
+  Future<void> _checkIsShared() async {
+    if (widget.currentUser == null) return;
+    try {
+      final shared = await _postService.isPostShared(widget.post.id, widget.currentUser.id);
+      if (!mounted) return;
+      setState(() => _isShared = shared);
+    } catch (_) {}
+  }
+
+  Future<void> _toggleLike() async {
+    final user = widget.currentUser;
+    if (user == null) return;
+    try {
+      await _postService.likePost(widget.post.id, user.id);
+      if (!mounted) return;
+      setState(() {
+        _isLiked = !_isLiked;
+        _likeCount = _isLiked ? _likeCount + 1 : (_likeCount > 0 ? _likeCount - 1 : 0);
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to update like: $e')));
+    }
+  }
+
+  Future<void> _toggleRepost() async {
+    final user = widget.currentUser;
+    if (user == null || isReel) return;
+    try {
+      await _postService.toggleRepost(widget.post.id, user.id);
+      if (!mounted) return;
+      setState(() {
+        _isReposted = !_isReposted;
+        _repostCount = _isReposted ? _repostCount + 1 : (_repostCount > 0 ? _repostCount - 1 : 0);
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to update repost: $e')));
+    }
+  }
+
+  Future<void> _toggleShare() async {
+    final user = widget.currentUser;
+    if (user == null || isReel) return;
+    try {
+      await _postService.toggleShareStatus(widget.post.id, user.id);
+      if (!mounted) return;
+      setState(() {
+        _isShared = !_isShared;
+        _shareCount = _isShared ? _shareCount + 1 : (_shareCount > 0 ? _shareCount - 1 : 0);
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to update share: $e')));
     }
   }
 
@@ -261,7 +345,6 @@ class _PostCardState extends State<PostCard> {
   @override
   Widget build(BuildContext context) {
     final username = (_displayName ?? '').isNotEmpty ? _displayName! : widget.post.userId;
-    final isLiked = _isLiked;
     final iconColor = Theme.of(context).iconTheme.color;
     final textColor = Theme.of(context).textTheme.bodyMedium?.color;
 
@@ -302,25 +385,26 @@ class _PostCardState extends State<PostCard> {
                     ),
                   ),
                 ),
-                // Follow button visible on every post
-                Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
-                  child: TextButton(
-                    onPressed: widget.currentUser == null ? null : _toggleFollow,
-                    child: Text(
-                      _isFollowing ? 'Following' : 'Follow',
-                      style: TextStyle(
-                        color: _isFollowing ? Colors.grey : Color(0xFF0095F6),
-                        fontWeight: FontWeight.w600,
+                // Follow button visible on every post EXCEPT own posts
+                if (widget.currentUser != null && widget.currentUser.id != widget.post.userId)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: TextButton(
+                      onPressed: _toggleFollow,
+                      child: Text(
+                        _isFollowing ? 'Following' : 'Follow',
+                        style: TextStyle(
+                          color: _isFollowing ? Colors.grey : Color(0xFF0095F6),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        minimumSize: Size(0, 0),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
                     ),
-                    style: TextButton.styleFrom(
-                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      minimumSize: Size(0, 0),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
                   ),
-                ),
                 IconButton(
                   icon: Icon(Icons.more_horiz, color: iconColor),
                   onPressed: () => _showPostOptions(context),
@@ -427,60 +511,78 @@ class _PostCardState extends State<PostCard> {
              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
              child: Row(
                children: [
-                 IconButton(
-                   icon: Icon(
-                     isLiked ? Icons.favorite : Icons.favorite_border,
-                     color: isLiked ? Colors.red : iconColor,
-                     size: 26,
+                 InkWell(
+                   onTap: _toggleLike,
+                   child: Padding(
+                     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                     child: Row(
+                       children: [
+                         Icon(
+                           _isLiked ? Icons.favorite : Icons.favorite_border,
+                           color: _isLiked ? Colors.red : iconColor,
+                           size: 24,
+                         ),
+                         SizedBox(width: 4),
+                         Text('$_likeCount', style: TextStyle(color: textColor, fontWeight: FontWeight.w600)),
+                       ],
+                     ),
                    ),
-                   onPressed: () async {
-                     final user = widget.currentUser;
-                     if (user == null) return;
-                     try {
-                       await _postService.likePost(widget.post.id, user.id);
-                       if (!mounted) return;
-                       setState(() {
-                         _isLiked = !_isLiked;
-                         _likeCount = _isLiked ? _likeCount + 1 : (_likeCount > 0 ? _likeCount - 1 : 0);
-                       });
-                     } catch (e) {
-                       if (!mounted) return;
-                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to update like: $e')));
-                     }
+                 ),
+                 SizedBox(width: 16),
+                 InkWell(
+                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PostDetailScreen(post: widget.post, onCommentAdded: _loadCommentCount))),
+                   child: Padding(
+                     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                     child: Row(
+                       children: [
+                         Icon(Icons.chat_bubble_outline, color: iconColor, size: 24),
+                         SizedBox(width: 4),
+                         Text('$_commentCount', style: TextStyle(color: textColor, fontWeight: FontWeight.w600)),
+                       ],
+                     ),
+                   ),
+                 ),
+                 SizedBox(width: 16),
+                 InkWell(
+                   onTap: _toggleRepost,
+                   child: Padding(
+                     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                     child: Row(
+                       children: [
+                         Icon(Icons.repeat, color: _isReposted ? Colors.green : iconColor, size: 24),
+                         SizedBox(width: 4),
+                         Text('$_repostCount', style: TextStyle(color: _isReposted ? Colors.green : textColor, fontWeight: FontWeight.w600)),
+                       ],
+                     ),
+                   ),
+                 ),
+                 SizedBox(width: 16),
+                 InkWell(
+                   onTap: () {
+                     _toggleShare();
+                     _showShareSheet();
                    },
-                 ),
-                 IconButton(
-                   icon: Icon(Icons.chat_bubble_outline, color: iconColor, size: 24),
-                   onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PostDetailScreen(post: widget.post))),
-                 ),
-                 IconButton(
-                   icon: Icon(Icons.repeat, color: iconColor, size: 24),
-                   onPressed: () { 
-                     // Placeholder for fully functioning repost
-                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Post Reposted!')));
-                   },
-                 ),
-                 IconButton(
-                   icon: Icon(Icons.send_outlined, color: iconColor, size: 24),
-                   onPressed: _showShareSheet,
+                   child: Padding(
+                     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                     child: Row(
+                       children: [
+                         Icon(Icons.send_outlined, color: _isShared ? Colors.blue : iconColor, size: 24),
+                         SizedBox(width: 4),
+                         Text('$_shareCount', style: TextStyle(color: _isShared ? Colors.blue : textColor, fontWeight: FontWeight.w600)),
+                       ],
+                     ),
+                   ),
                  ),
                  Spacer(),
                  IconButton(
                    icon: Icon(_isSaved ? Icons.bookmark : Icons.bookmark_border, color: iconColor, size: 26),
                    onPressed: _toggleSave,
+                   padding: EdgeInsets.zero,
+                   constraints: BoxConstraints(),
                  ),
                ],
              ),
            ),
-          
-          // Likes count
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-            child: Text(
-              '$_likeCount likes',
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-            ),
-          ),
           
           // Music / Audio info
           if (isReel)

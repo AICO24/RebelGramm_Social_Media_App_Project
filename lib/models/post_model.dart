@@ -1,3 +1,10 @@
+// ==========================================
+// ROLE: Member 3 - Content Creation & Interactions
+// ==========================================
+// The Data structure representing a single post.
+// Includes serialization methods (toMap) and deserialization logic (fromMap) 
+// required to convert pure JSON from Firebase into strongly-typed Dart objects.
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class PostModel {
@@ -9,6 +16,8 @@ class PostModel {
   final DateTime timestamp;
   final List<String> likes;
   final int likeCount;
+  final int repostCount;
+  final int shareCount;
 
   PostModel({
     required this.id,
@@ -19,6 +28,8 @@ class PostModel {
     required this.timestamp,
     required this.likes,
     required this.likeCount,
+    this.repostCount = 0,
+    this.shareCount = 0,
   });
 
   Map<String, dynamic> toMap() {
@@ -31,6 +42,8 @@ class PostModel {
       'timestamp': timestamp,
       'likes': likes,
       'likeCount': likeCount,
+      'repostCount': repostCount,
+      'shareCount': shareCount,
     };
   }
 
@@ -57,6 +70,8 @@ class PostModel {
       timestamp: ts,
       likes: List<String>.from(map['likes'] ?? []),
       likeCount: (map['likeCount'] is int) ? map['likeCount'] as int : (map['likes'] != null ? (map['likes'] as List).length : 0),
+      repostCount: map['repostCount'] ?? 0,
+      shareCount: map['shareCount'] ?? 0,
     );
   }
 }

@@ -1,3 +1,11 @@
+// ==========================================
+// ROLE: Member 1 - User Identity & Profiles
+// ==========================================
+// This Provider manages the global state of the currently logged-in user.
+// By using ChangeNotifier, any screen in the app can listen to this provider.
+// When the user logs in and the profile is fetched, notifyListeners() is called,
+// updating all UI elements that depend on the user's data (like profile avatars).
+
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';

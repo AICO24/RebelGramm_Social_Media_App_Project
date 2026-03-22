@@ -1,8 +1,17 @@
+// ==========================================
+// ROLE: Member 6 - Artificial Intelligence & Notifications
+// ==========================================
+// Acts as the global activity monitor listening to the 'notifications' collection.
+// Dynamically parses the interaction 'type' (like, comment, share, follow) 
+// to automatically draw the correct visual Icon and intelligently route click events 
+// directly to the shared Post or Reel Model.
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../providers/user_provider.dart';
 import '../models/post_model.dart';
+import '../models/reel_model.dart';
 import 'post_detail_screen.dart';
 
 class NotificationsScreen extends StatelessWidget {
@@ -112,20 +121,31 @@ class NotificationsScreen extends StatelessWidget {
                     return ListTile(
                       onTap: () async {
                         final type = notif['type'] as String?;
-                        if (type == 'like' || type == 'comment') {
+                        if (type == 'like' || type == 'comment' || type == 'share') {
                           final postId = notif['postId'] as String?;
                           if (postId != null) {
                             try {
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Looking up post...'), duration: Duration(milliseconds: 600)));
-                              final doc = await FirebaseFirestore.instance.collection('posts').doc(postId).get();
-                              if (doc.exists && context.mounted) {
-                                final post = PostModel.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Looking up item...'), duration: Duration(milliseconds: 600)));
+                              
+                              final postDoc = await FirebaseFirestore.instance.collection('posts').doc(postId).get();
+                              if (postDoc.exists && context.mounted) {
+                                final post = PostModel.fromMap(postDoc.data() as Map<String, dynamic>, postDoc.id);
                                 Navigator.push(context, MaterialPageRoute(builder: (_) => PostDetailScreen(post: post)));
-                              } else if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('This post no longer exists')));
+                                return;
+                              }
+                              
+                              final reelDoc = await FirebaseFirestore.instance.collection('reels').doc(postId).get();
+                              if (reelDoc.exists && context.mounted) {
+                                final reel = ReelModel.fromMap(reelDoc.data() as Map<String, dynamic>, reelDoc.id);
+                                Navigator.push(context, MaterialPageRoute(builder: (_) => PostDetailScreen(post: reel)));
+                                return;
+                              }
+                              
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('This item no longer exists')));
                               }
                             } catch (e) {
-                              if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error loading post: $e')));
+                              if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error loading item: $e')));
                             }
                           }
                         } else if (type == 'follow') {
@@ -141,7 +161,11 @@ class NotificationsScreen extends StatelessWidget {
                               ? Icons.favorite
                               : notif['type'] == 'comment'
                                   ? Icons.chat_bubble
-                                  : Icons.person_add,
+                                  : notif['type'] == 'share'
+                                      ? Icons.send
+                                      : notif['type'] == 'follow'
+                                          ? Icons.person_add
+                                          : Icons.notifications,
                           color: Color(0xFF0095F6),
                           size: 24,
                         ),

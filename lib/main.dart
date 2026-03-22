@@ -9,7 +9,6 @@ import 'screens/splash_screen.dart';
 // splash screen handles initial navigation to login/home
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
 
 void main() async {
@@ -102,120 +101,10 @@ class RebelGramApp extends StatelessWidget {
           dividerColor: Colors.grey.shade900,
         ),
         themeMode: themeProvider.themeMode,
-        home: const FirebaseTestScreen(),
+        home: const SplashScreen(),
       );
     },
   ),
 );
-  }
-}
-
-class FirebaseTestScreen extends StatefulWidget {
-  const FirebaseTestScreen({Key? key}) : super(key: key);
-
-  @override
-  _FirebaseTestScreenState createState() => _FirebaseTestScreenState();
-}
-
-class _FirebaseTestScreenState extends State<FirebaseTestScreen> {
-  String _status = "Testing Firebase...";
-  bool _isWorking = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _testFirebase();
-  }
-
-  Future<void> _testFirebase() async {
-    try {
-      // Test 1: Check if Firebase is initialized
-      final user = FirebaseAuth.instance.currentUser;
-      setState(() {
-        _status = "Firebase initialized.\nUser: ${user?.email ?? 'Not logged in'}";
-      });
-
-      // Test 2: Try to read from Firestore safely (avoid actual user data to prevent listener crashes)
-      final testDoc = await FirebaseFirestore.instance
-          .collection('system_test')
-          .limit(1)
-          .get();
-
-      setState(() {
-        _status = "✅ Firebase is WORKING!\nRead test passed.";
-        _isWorking = true;
-      });
-
-      // Test 3: Try to write
-      await FirebaseFirestore.instance.collection('system_test').add({
-        'message': 'Test from RebelGram',
-        'timestamp': FieldValue.serverTimestamp(),
-      });
-
-      setState(() {
-        _status = "✅ Read and Write both working!\nFirebase is fully functional.";
-      });
-
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _status = "❌ Error: $e";
-          _isWorking = false;
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('RebelGram - Firebase Fix'),
-        backgroundColor: _isWorking ? Colors.green : Colors.red,
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                _isWorking ? Icons.check_circle : Icons.error,
-                size: 80,
-                color: _isWorking ? Colors.green : Colors.red,
-              ),
-              const SizedBox(height: 20),
-              Text(
-                _status,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 16),
-              ),
-              const SizedBox(height: 30),
-              if (!_isWorking)
-                ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _status = "Retrying...";
-                    });
-                    _testFirebase();
-                  },
-                  child: const Text('Retry'),
-                ),
-              if (_isWorking)
-                ElevatedButton(
-                  onPressed: () {
-                    // Navigate to actual app
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (_) => const SplashScreen()),
-                    );
-                  },
-                  child: const Text('Continue to App'),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }

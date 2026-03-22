@@ -1,3 +1,10 @@
+// ==========================================
+// ROLE: Member 2 - The Main Feed & Stories
+// ==========================================
+// A reusable UI widget that renders the circular avatars seen at the top of the Home feed.
+// Uses a gradient border to signify unviewed stories, and handles tap events to immediately
+// launch the full-screen Story Viewer or prompt the user to add a new story.
+
 import 'package:flutter/material.dart';
 import '../services/storage_service.dart';
 
@@ -7,6 +14,7 @@ class StoryAvatar extends StatelessWidget {
   final bool isCurrentUser;
   final bool hasStory;
   final VoidCallback? onTap;
+  final VoidCallback? onAddStoryTap;
 
   const StoryAvatar({
     Key? key,
@@ -15,6 +23,7 @@ class StoryAvatar extends StatelessWidget {
     this.isCurrentUser = false,
     this.hasStory = false,
     this.onTap,
+    this.onAddStoryTap,
   }) : super(key: key);
 
   @override
@@ -84,14 +93,17 @@ class StoryAvatar extends StatelessWidget {
                      Positioned(
                        bottom: 0,
                        right: 0,
-                       child: Container(
-                         padding: EdgeInsets.all(2),
-                         decoration: BoxDecoration(
-                           color: Color(0xFF0095F6),
-                           shape: BoxShape.circle,
-                           border: Border.all(color: Theme.of(context).scaffoldBackgroundColor, width: 2),
+                       child: GestureDetector(
+                         onTap: onAddStoryTap ?? onTap,
+                         child: Container(
+                           padding: EdgeInsets.all(2),
+                           decoration: BoxDecoration(
+                             color: Color(0xFF0095F6),
+                             shape: BoxShape.circle,
+                             border: Border.all(color: Theme.of(context).scaffoldBackgroundColor, width: 2),
+                           ),
+                           child: Icon(Icons.add, color: Colors.white, size: 14),
                          ),
-                         child: Icon(Icons.add, color: Colors.white, size: 14),
                        ),
                      ),
                 ],

@@ -1,3 +1,13 @@
+// ==========================================
+// ROLE: Member 1 - User Identity & Profiles
+// ==========================================
+// This screen displays a user's portfolio, including their grid of posts, 
+// followers, and following counts. 
+// It also contains logic for:
+// - Following/Unfollowing algorithms (updating follower collections)
+// - Fetching all posts authored by the specific user ID.
+// - Editing the profile (uploading new avatars).
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';

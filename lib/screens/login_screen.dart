@@ -1,3 +1,10 @@
+// ==========================================
+// ROLE: Member 1 - User Identity & Profiles
+// ==========================================
+// Handles the authentication gateway. Uses Firebase Auth to sign in users
+// with an email and password. On success, it fetches the user details 
+// and populates the UserProvider before navigating to the HomeScreen.
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 // removed FontAwesome usage; keep imports minimal

@@ -1,3 +1,10 @@
+// ==========================================
+// ROLE: Member 6 - Artificial Intelligence & Notifications
+// ==========================================
+// Integrates an AI large language model into the social app.
+// Manages the chat interface, loading indicators during API lag, local chat persistence,
+// and applies the consistent 4-color gradient identity to separate AI features from normal networking.
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
@@ -227,6 +234,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
         actions: [
           PopupMenuButton<String>(
             icon: Icon(Icons.more_vert, color: Colors.white),
+            color: Color(0xFF2C2C2C),
             onSelected: (value) {
               if (value == 'clear') {
                 _clearChatHistory();
@@ -237,9 +245,9 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
                 value: 'clear',
                 child: Row(
                   children: [
-                    Icon(Icons.delete_outline, size: 20, color: Colors.black87),
+                    Icon(Icons.delete_outline, size: 20, color: Colors.white),
                     SizedBox(width: 8),
-                    Text('Clear conversation', style: TextStyle(color: Colors.black87)),
+                    Text('Clear conversation', style: TextStyle(color: Colors.white)),
                   ],
                 ),
               ),
@@ -262,7 +270,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
                       height: 100,
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [Color(0xFF833AB4), Color(0xFFE1306C), Color(0xFFF56040)],
+                          colors: [Color(0xFF833AB4), Color(0xFFE1306C), Color(0xFFF56040), Color(0xFFF77737)],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
@@ -386,7 +394,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
                     height: 40,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [Color(0xFF833AB4), Color(0xFFE1306C), Color(0xFFF56040)],
+                        colors: [Color(0xFF833AB4), Color(0xFFE1306C), Color(0xFFF56040), Color(0xFFF77737)],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),

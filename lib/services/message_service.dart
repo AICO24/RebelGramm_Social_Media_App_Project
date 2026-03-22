@@ -1,3 +1,10 @@
+// ==========================================
+// ROLE: Member 5 - Real-time Messaging
+// ==========================================
+// Controls the messaging backend infrastructure.
+// - sendMessage(): Injects a document into the combined 'messages' thread for two specific User IDs.
+// - getConversations(): Subscribes to the stream of active chat heads for the current user.
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/message_model.dart';
 

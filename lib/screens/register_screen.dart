@@ -1,3 +1,11 @@
+// ==========================================
+// ROLE: Member 1 - User Identity & Profiles
+// ==========================================
+// Allows new users to create accounts. Responsible for:
+// 1. Creating the Firebase Auth credential.
+// 2. Uploading a selected profile image.
+// 3. Generating a custom user document in the Firestore 'users' collection.
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 // removed FontAwesome usage; keep imports minimal

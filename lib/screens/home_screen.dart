@@ -1,3 +1,13 @@
+// ==========================================
+// ROLE: Member 2 - The Main Feed & Stories
+// ==========================================
+// The core scaffold of the app. Features include:
+// - A top app bar with navigation to Messages (Inbox).
+// - A horizontal list of Stories fetched dynamically from followed users.
+// - A vertically scrolling chronological Feed of Posts using StreamBuilder
+//   to ensure real-time updates as users scroll.
+// - A bottom navigation bar connecting the main tabs.
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -231,10 +241,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     isCurrentUser: isCurrentUser,
                     hasStory: hasStory,
                     onTap: isCurrentUser
-                        ? _addStory
+                        ? (hasStory 
+                            ? () => _viewStory(uid, username, profilePic, latestStoryMap[uid]!.imageUrl)
+                            : _addStory)
                         : hasStory
                             ? () => _viewStory(uid, username, profilePic, latestStoryMap[uid]!.imageUrl)
                             : null,
+                    onAddStoryTap: isCurrentUser ? _addStory : null,
                   );
                 },
               ),
@@ -635,14 +648,29 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       floatingActionButton: Padding(
         padding: const EdgeInsets.only(bottom: 8.0, right: 4.0),
-        child: FloatingActionButton(
-          heroTag: 'chatbotFab', // Avoid conflicts
-          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ChatbotScreen())),
-          backgroundColor: Color(0xFF0095F6),
-          foregroundColor: Colors.white,
-          elevation: 4,
-          shape: CircleBorder(),
-          child: FaIcon(FontAwesomeIcons.robot, size: 22),
+        child: InkWell(
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ChatbotScreen())),
+          borderRadius: BorderRadius.circular(28),
+          child: Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: [Color(0xFF833AB4), Color(0xFFE1306C), Color(0xFFF56040), Color(0xFFF77737)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.3),
+                  blurRadius: 6,
+                  offset: Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Icon(Icons.smart_toy_outlined, color: Colors.white, size: 28),
+          ),
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,

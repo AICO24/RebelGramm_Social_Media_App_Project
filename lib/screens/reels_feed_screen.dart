@@ -1,3 +1,12 @@
+// ==========================================
+// ROLE: Member 4 - Reels & Video Architecture
+// ==========================================
+// This screen uses a PageView.builder to mimic the infinite vertical snapping scroll of TikTok/Reels.
+// Key integrations:
+// - video_player: Loads and caches remote network URLs for smooth playback.
+// - visibility_detector: Triggers pause/play logic automatically depending on 
+//   how much of the reel is actively visible on the user's glass screen.
+
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -5,6 +14,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../models/reel_model.dart';
 import '../services/reel_service.dart';
+import '../services/post_service.dart';
 import '../providers/user_provider.dart';
 import 'add_reel_screen.dart';
 import 'post_detail_screen.dart';
@@ -79,17 +89,22 @@ class _ReelPlayerItemState extends State<ReelPlayerItem> {
   bool _isPlaying = true;
   bool _isLiked = false;
   int _likeCount = 0;
+  int _commentCount = 0;
+  int _shareCount = 0;
+  bool _isShared = false;
 
   @override
   void initState() {
     super.initState();
     _likeCount = (widget.reel.likes).length;
+    _shareCount = widget.reel.shareCount;
     
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final uid = Provider.of<UserProvider>(context, listen: false).user?.id;
       if (uid != null && (widget.reel.likes).contains(uid)) {
         if (mounted) setState(() => _isLiked = true);
       }
+      _loadInteractionData();
     });
 
     _controller = VideoPlayerController.networkUrl(Uri.parse(widget.reel.videoUrl))
@@ -103,6 +118,89 @@ class _ReelPlayerItemState extends State<ReelPlayerItem> {
   void dispose() {
     _controller?.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadInteractionData() async {
+    final uid = Provider.of<UserProvider>(context, listen: false).user?.id;
+    if (uid == null) return;
+    
+    final comments = await PostService().getCommentCount(widget.reel.id);
+    final shared = await ReelService().isReelShared(widget.reel.id, uid);
+    if (mounted) {
+      setState(() {
+        _commentCount = comments;
+        _isShared = shared;
+      });
+    }
+  }
+
+  Future<void> _toggleShare() async {
+    final uid = Provider.of<UserProvider>(context, listen: false).user?.id;
+    if (uid == null) return;
+    try {
+      await ReelService().toggleShareStatus(widget.reel.id, uid);
+      if (mounted) {
+        setState(() {
+          _isShared = !_isShared;
+          _shareCount = _isShared ? _shareCount + 1 : (_shareCount > 0 ? _shareCount - 1 : 0);
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _showShareSheet() async {
+    final user = Provider.of<UserProvider>(context, listen: false).user;
+    if (user == null) return;
+    final follows = await FirebaseFirestore.instance
+        .collection('followers')
+        .doc(user.id)
+        .collection('following')
+        .get();
+    
+    if (follows.docs.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('You need to follow someone to share reels')),
+      );
+      return;
+    }
+    
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Color(0xFF1E1E1E),
+      builder: (context) {
+        return ListView(
+          shrinkWrap: true,
+          children: follows.docs.map((doc) {
+            final data = doc.data();
+            final fid = doc.id;
+            String fname = data['username'] ?? 'User';
+            final fpic = data['profilePic'] ?? '';
+            
+            return ListTile(
+              leading: CircleAvatar(
+                backgroundImage: fpic.isNotEmpty ? NetworkImage(fpic) : null,
+                backgroundColor: Colors.grey[700],
+                child: fpic.isEmpty
+                    ? Text(fname.isNotEmpty ? fname[0].toUpperCase() : '?', style: TextStyle(color: Colors.white))
+                    : null,
+              ),
+              title: Text(fname, style: TextStyle(color: Colors.white)),
+              onTap: () async {
+                try {
+                  await ReelService().shareReel(widget.reel.id, user.id, fid);
+                  if (mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Reel sent to $fname')));
+                  }
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to send reel: $e')));
+                }
+              },
+            );
+          }).toList(),
+        );
+      },
+    );
   }
 
   @override
@@ -195,12 +293,16 @@ class _ReelPlayerItemState extends State<ReelPlayerItem> {
                   },
                   color: _isLiked ? Colors.red : Colors.white,
                 ),
-                _buildActionBuilder(Icons.comment, '0', () {
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => PostDetailScreen(post: widget.reel)));
+                _buildActionBuilder(Icons.comment, _commentCount.toString(), () {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => PostDetailScreen(
+                    post: widget.reel, 
+                    onCommentAdded: () => _loadInteractionData(),
+                  ))).then((_) => _loadInteractionData());
                 }),
-                _buildActionBuilder(Icons.send, '', () {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Share functional coming soon!')));
-                }),
+                _buildActionBuilder(Icons.send, _shareCount > 0 ? _shareCount.toString() : '0', () {
+                  _toggleShare();
+                  _showShareSheet();
+                }, color: _isShared ? Colors.blue : Colors.white),
                 _buildActionBuilder(Icons.more_vert, '', () {}),
               ],
             ),

@@ -163,48 +163,65 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                   itemCount: comments.length,
                   itemBuilder: (context, index) {
                     final comment = comments[index];
-                    return Padding(
-                      padding: EdgeInsets.symmetric(vertical: 8),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          CircleAvatar(
-                            radius: 16,
-                            backgroundColor: Colors.grey[800],
-                            child: Icon(Icons.person, size: 18, color: Colors.grey[600]),
-                          ),
-                          SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                RichText(
-                                  text: TextSpan(
-                                    style: TextStyle(color: Colors.white, fontSize: 14),
-                                    children: [
-                                      TextSpan(
-                                        text: comment.userId.length > 10 
-                                            ? '${comment.userId.substring(0, 10)}...' 
-                                            : comment.userId,
-                                        style: TextStyle(fontWeight: FontWeight.w600),
+                    return FutureBuilder<DocumentSnapshot>(
+                      future: FirebaseFirestore.instance.collection('users').doc(comment.userId).get(),
+                      builder: (context, userSnap) {
+                        String username = comment.userId;
+                        String profilePic = '';
+                        if (userSnap.hasData && userSnap.data!.exists) {
+                          final userData = userSnap.data!.data() as Map<String, dynamic>;
+                          username = userData['username'] ?? comment.userId;
+                          profilePic = userData['profilePic'] ?? '';
+                        }
+                        
+                        return Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              CircleAvatar(
+                                radius: 16,
+                                backgroundColor: Colors.grey[800],
+                                backgroundImage: profilePic.isNotEmpty ? NetworkImage(profilePic) : null,
+                                child: profilePic.isEmpty
+                                    ? Text(
+                                        username.isNotEmpty ? username[0].toUpperCase() : '?',
+                                        style: TextStyle(color: Colors.white, fontSize: 14),
+                                      )
+                                    : null,
+                              ),
+                              SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    RichText(
+                                      text: TextSpan(
+                                        style: TextStyle(color: Colors.white, fontSize: 14),
+                                        children: [
+                                          TextSpan(
+                                            text: username,
+                                            style: TextStyle(fontWeight: FontWeight.w600),
+                                          ),
+                                          TextSpan(text: '  ${comment.comment}'),
+                                        ],
                                       ),
-                                      TextSpan(text: '  ${comment.comment}'),
-                                    ],
-                                  ),
+                                    ),
+                                    SizedBox(height: 4),
+                                    Text(
+                                      _formatTimestamp(comment.timestamp),
+                                      style: TextStyle(
+                                        color: Colors.grey[500],
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                SizedBox(height: 4),
-                                Text(
-                                  _formatTimestamp(comment.timestamp),
-                                  style: TextStyle(
-                                    color: Colors.grey[500],
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
+                        );
+                      },
                     );
                   },
                 );
