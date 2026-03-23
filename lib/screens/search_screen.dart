@@ -10,6 +10,7 @@ import '../services/user_service.dart';
 import '../services/post_service.dart';
 import '../screens/post_detail_screen.dart';
 import '../widgets/friend_suggestion_card.dart';
+import '../screens/other_user_profile_screen.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({Key? key}) : super(key: key);
@@ -225,6 +226,11 @@ class _SearchScreenState extends State<SearchScreen> {
                       ),
                       child: Text('Follow', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white)),
                     ),
+              onTap: () {
+                if (user.id != currentUser?.id) {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => OtherUserProfileScreen(userId: user.id)));
+                }
+              },
             );
           },
         );

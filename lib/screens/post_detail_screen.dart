@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import 'package:provider/provider.dart';
 import '../models/comment_model.dart';
 import '../providers/user_provider.dart';
+import '../screens/other_user_profile_screen.dart';
 
 class PostDetailScreen extends StatefulWidget {
   final dynamic post;
@@ -179,16 +180,24 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              CircleAvatar(
-                                radius: 16,
-                                backgroundColor: Colors.grey[800],
-                                backgroundImage: profilePic.isNotEmpty ? NetworkImage(profilePic) : null,
-                                child: profilePic.isEmpty
-                                    ? Text(
-                                        username.isNotEmpty ? username[0].toUpperCase() : '?',
-                                        style: TextStyle(color: Colors.white, fontSize: 14),
-                                      )
-                                    : null,
+                              GestureDetector(
+                                onTap: () {
+                                  final user = Provider.of<UserProvider>(context, listen: false).user;
+                                  if (user != null && comment.userId != user.id) {
+                                    Navigator.push(context, MaterialPageRoute(builder: (_) => OtherUserProfileScreen(userId: comment.userId)));
+                                  }
+                                },
+                                child: CircleAvatar(
+                                  radius: 16,
+                                  backgroundColor: Colors.grey[800],
+                                  backgroundImage: profilePic.isNotEmpty ? NetworkImage(profilePic) : null,
+                                  child: profilePic.isEmpty
+                                      ? Text(
+                                          username.isNotEmpty ? username[0].toUpperCase() : '?',
+                                          style: TextStyle(color: Colors.white, fontSize: 14),
+                                        )
+                                      : null,
+                                ),
                               ),
                               SizedBox(width: 10),
                               Expanded(

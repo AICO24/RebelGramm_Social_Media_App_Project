@@ -17,6 +17,7 @@ import '../models/reel_model.dart';
 import '../services/post_service.dart';
 import '../services/storage_service.dart';
 import '../screens/post_detail_screen.dart';
+import '../screens/other_user_profile_screen.dart';
 
 class PostCard extends StatefulWidget {
   final dynamic post;
@@ -360,28 +361,42 @@ class _PostCardState extends State<PostCard> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
               children: [
-                CircleAvatar(
-                  radius: 16,
-                  backgroundColor: Colors.grey.shade300,
-                  backgroundImage: (_profilePic ?? '').isNotEmpty ? NetworkImage(_profilePic!) : null,
-                  child: (_profilePic ?? '').isEmpty
-                      ? Text(
-                          username.isNotEmpty ? username[0].toUpperCase() : '?',
-                          style: TextStyle(
-                            color: Colors.black87,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                          ),
-                        )
-                      : null,
-                ),
-                SizedBox(width: 10),
                 Expanded(
-                  child: Text(
-                    username,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
+                  child: GestureDetector(
+                    onTap: () {
+                      if (widget.currentUser != null && widget.post.userId != widget.currentUser.id) {
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => OtherUserProfileScreen(userId: widget.post.userId)));
+                      }
+                    },
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 16,
+                          backgroundColor: Colors.grey.shade300,
+                          backgroundImage: (_profilePic ?? '').isNotEmpty ? NetworkImage(_profilePic!) : null,
+                          child: (_profilePic ?? '').isEmpty
+                              ? Text(
+                                  username.isNotEmpty ? username[0].toUpperCase() : '?',
+                                  style: TextStyle(
+                                    color: Colors.black87,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14,
+                                  ),
+                                )
+                              : null,
+                        ),
+                        SizedBox(width: 10),
+                        Flexible(
+                          child: Text(
+                            username,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),

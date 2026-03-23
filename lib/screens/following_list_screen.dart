@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../providers/user_provider.dart';
 import 'profile_screen.dart'; // Just in case, though usually we tap to open generic profile
+import 'other_user_profile_screen.dart';
 
 class FollowingListScreen extends StatefulWidget {
   final String userId;
@@ -14,13 +15,31 @@ class FollowingListScreen extends StatefulWidget {
 }
 
 class _FollowingListScreenState extends State<FollowingListScreen> {
-  Future<void> _unfollowUser(String targetUserId, String currentUserId) async {
+  Future<void> _unfollowUser(String targetId, String username, String currentUserId) async {
     try {
-      await FirebaseFirestore.instance.collection('followers').doc(currentUserId).collection('following').doc(targetUserId).delete();
-      await FirebaseFirestore.instance.collection('followers').doc(targetUserId).collection('followers').doc(currentUserId).delete();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Unfollowed user')));
+      await FirebaseFirestore.instance.collection('followers').doc(currentUserId).collection('following').doc(targetId).delete();
+      await FirebaseFirestore.instance.collection('followers').doc(targetId).collection('followers').doc(currentUserId).delete();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Unfollowed $username')));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to unfollow: $e')));
+    }
+  }
+
+  Future<void> _followUser(String targetId, String username, String profilePic, String currentUserId) async {
+    try {
+      await FirebaseFirestore.instance.collection('followers').doc(currentUserId).collection('following').doc(targetId).set({
+        'userId': targetId,
+        'username': username,
+        'profilePic': profilePic,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+      await FirebaseFirestore.instance.collection('followers').doc(targetId).collection('followers').doc(currentUserId).set({
+        'userId': currentUserId,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Now following $username!')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to follow: $e')));
     }
   }
 
@@ -61,24 +80,60 @@ class _FollowingListScreenState extends State<FollowingListScreen> {
               final username = data['username'] ?? 'User';
               final profilePic = data['profilePic'] ?? '';
 
-              return ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: Colors.grey[800],
-                  backgroundImage: profilePic.isNotEmpty ? NetworkImage(profilePic) : null,
-                  child: profilePic.isEmpty ? Icon(Icons.person, color: Colors.white) : null,
-                ),
-                title: Text(username, style: TextStyle(fontWeight: FontWeight.w600)),
-                trailing: isCurrentUser
-                  ? OutlinedButton(
-                      onPressed: () => _unfollowUser(targetId, currentUserId),
+              return StreamBuilder<DocumentSnapshot>(
+                stream: FirebaseFirestore.instance.collection('followers').doc(currentUserId).collection('following').doc(targetId).snapshots(),
+                builder: (context, followSnap) {
+                  final isFollowingBack = followSnap.hasData && followSnap.data!.exists;
+
+                  Widget? trailingWidget;
+                  if (isCurrentUser) {
+                    trailingWidget = OutlinedButton(
+                      onPressed: () => _unfollowUser(targetId, username, currentUserId),
                       style: OutlinedButton.styleFrom(
-                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        side: BorderSide(color: Color(0xFFDBDBDB)),
-                        minimumSize: Size(90, 36),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        side: const BorderSide(color: Color(0xFFDBDBDB)),
+                        minimumSize: const Size(90, 36),
                       ),
                       child: Text('Following', style: TextStyle(fontSize: 13, color: Theme.of(context).textTheme.bodyMedium?.color)),
-                    )
-                  : null,
+                    );
+                  } else if (targetId != currentUserId && currentUserId.isNotEmpty) {
+                    trailingWidget = isFollowingBack
+                        ? OutlinedButton(
+                            onPressed: () => _unfollowUser(targetId, username, currentUserId),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              side: const BorderSide(color: Color(0xFFDBDBDB)),
+                              minimumSize: const Size(90, 36),
+                            ),
+                            child: Text('Following', style: TextStyle(fontSize: 13, color: Theme.of(context).textTheme.bodyMedium?.color)),
+                          )
+                        : ElevatedButton(
+                            onPressed: () => _followUser(targetId, username, profilePic, currentUserId),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0095F6),
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              elevation: 0,
+                              minimumSize: const Size(90, 36),
+                            ),
+                            child: const Text('Follow', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white)),
+                          );
+                  }
+
+                  return ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: Colors.grey[800],
+                      backgroundImage: profilePic.isNotEmpty ? NetworkImage(profilePic) : null,
+                      child: profilePic.isEmpty ? const Icon(Icons.person, color: Colors.white) : null,
+                    ),
+                    title: Text(username, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    trailing: trailingWidget,
+                    onTap: () {
+                      if (targetId != currentUserId) {
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => OtherUserProfileScreen(userId: targetId)));
+                      }
+                    },
+                  );
+                }
               );
             },
           );
